@@ -25,8 +25,8 @@ This enhanced version provides a complete Docker-based deployment with PostgreSQ
 
 ```bash
 # Clone the repository
-git clone https://github.com/n30nex/malla.git
-cd malla
+git clone https://github.com/n30nex/MeshQuery
+cd MeshQuery
 
 # Start all services (PostgreSQL, MQTT, Web UI, Data Capture)
 docker-compose up --build
