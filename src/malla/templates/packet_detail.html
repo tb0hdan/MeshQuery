@@ -987,9 +987,9 @@ async function loadTracerouteMap(routeNodes) {
         });
 
         if (knownLocations.length === 0) {
-            // No known locations - create a default center location and place all nodes around it
-            const defaultLat = 40.4168; // Madrid center
-            const defaultLng = -3.7038;
+            // No known locations - create a default center location over the ocean
+            const defaultLat = 0.0; // Equator
+            const defaultLng = -30.0; // Mid-Atlantic Ocean
 
             nodeIds.forEach((nodeId, index) => {
                 const offsetLat = (Math.random() - 0.5) * 0.02; // ~2km offset

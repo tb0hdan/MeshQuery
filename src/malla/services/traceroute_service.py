@@ -475,123 +475,45 @@ class TracerouteService:
     def get_longest_links_analysis(
         min_distance_km: float = 1.0, min_snr: float = -20.0, max_results: int = 100
     ) -> dict[str, Any]:
-        """
-        Get the longest links analysis using Tier B optimized pipeline.
+        """Return longest single-hop and multi-hop links ranked by distance (km)."""
+        logger.info("Computing longest links analysis (distance-based)")
+        from ..database.schema_tier_b import get_longest_links_optimized
 
-        This method now uses the materialized view and normalized hop data
-        for much better performance than the old approach.
-
-        Args:
-            min_distance_km: Minimum distance in kilometers
-            min_snr: Minimum SNR in dB
-            max_results: Maximum number of results to return
-
-        Returns:
-            Dictionary containing analysis results
-        """
-        start_time = time.time()
-        logger.info(
-            f"Getting longest links analysis (Tier B optimized): min_distance={min_distance_km}km, min_snr={min_snr}dB, max_results={max_results}"
+        data = get_longest_links_optimized(
+            min_distance_km=min_distance_km, min_snr=min_snr, max_results=max_results, hours=168
         )
 
-        # Check cache first
-        cache = get_analytics_cache()
-        cache_key = f"longest_links_tier_b_{min_distance_km}_{min_snr}_{max_results}"
-        cached_result = cache.get(cache_key)
-
-        if cached_result is not None:
-            logger.info("Returning cached Tier B longest links analysis")
-            return cached_result
-
-        try:
-            # Use the new Tier B optimized query
-            from ..database.schema_tier_b import get_longest_links_optimized
-
-            # Get optimized results
-            links = get_longest_links_optimized(
-                min_distance_km=min_distance_km,
-                min_snr=min_snr,
-                max_results=max_results,
-                hours=168,  # 7 days
-            )
-
-            fetch_duration = time.time() - start_time
-            logger.info(
-                f"TIMING: Tier B optimized query took {fetch_duration:.3f}s for {len(links)} results"
-            )
-
-            # Convert to expected format for frontend
-            direct_links = []
-            for link in links:
-                link_entry = {
-                    # Frontend expects these field names
+        def map_list(items):
+            mapped = []
+            for link in items:
+                mapped.append({
                     "from_node_id": link["source_id"],
                     "to_node_id": link["dest_id"],
-                    "from_node_name": f"!{link['source_id']:08x}",  # Generate node name from ID
-                    "to_node_name": f"!{link['dest_id']:08x}",  # Generate node name from ID
+                    "from_node_name": f"!{link['source_id']:08x}",
+                    "to_node_name": f"!{link['dest_id']:08x}",
                     "distance_km": link["distance_km"],
-                    "avg_snr": link["snr"],  # Frontend expects avg_snr, not snr
-                    "traceroute_count": link["traceroute_count"],
-                    "source_location": link["source_location"],
-                    "dest_location": link["dest_location"],
+                    "avg_snr": link["snr"],
                     "timestamp": link["last_seen"],
-                    "packet_id": None,  # Not available in optimized format
-                }
-                direct_links.append(link_entry)
+                    "packet_id": None,
+                })
+            return mapped
 
-            # Find longest direct link
-            longest_direct = direct_links[0] if direct_links else None
+        single = map_list(data.get("single_hop", []))
+        multi = map_list(data.get("multi_hop", []))
 
-            # Build summary
-            summary = {
-                "total_links": len(direct_links),
-                "direct_links": len(direct_links),
-                "longest_direct": longest_direct,
-                "longest_path": None,  # Simplified for now
-            }
-
-            # Build final result
-            result_dict = {
-                "summary": summary,
-                "direct_links": direct_links,
-                "indirect_links": [],  # Simplified for now
-                "criteria": {
-                    "min_distance_km": min_distance_km,
-                    "min_snr": min_snr,
-                    "max_results": max_results,
-                },
-                "pipeline": "tier_b_optimized",  # Indicate this is using the new pipeline
-            }
-
-            total_duration = time.time() - start_time
-            logger.info(f"TIMING: Total Tier B analysis took {total_duration:.3f}s")
-
-            # Cache the result for 10 minutes (600 seconds)
-            cache.set(cache_key, result_dict, ttl=600)
-            logger.info("Cached Tier B longest links analysis")
-
-            return result_dict
-
-        except Exception as e:
-            logger.error(f"Error in Tier B longest links analysis: {e}", exc_info=True)
-            # Return safe empty structure instead of raising
-            return {
-                "summary": {
-                    "total_links": 0,
-                    "direct_links": 0,
-                    "longest_direct": None,
-                    "longest_path": None,
-                },
-                "direct_links": [],
-                "indirect_links": [],
-                "criteria": {
-                    "min_distance_km": min_distance_km,
-                    "min_snr": min_snr,
-                    "max_results": max_results,
-                },
-                "pipeline": "tier_b_optimized",
-                "error": str(e),
-            }
+        result = {
+            "summary": {
+                "total_links": len(single) + len(multi),
+                "direct_links": len(single),
+                "longest_direct": single[0] if single else None,
+                "longest_path": multi[0] if multi else None,
+            },
+            "single_hop": single,
+            "multi_hop": multi,
+            "direct_links": single,  # For JavaScript compatibility
+            "indirect_links": multi,  # For JavaScript compatibility
+        }
+        return result
 
     @staticmethod
     def get_network_graph_data(

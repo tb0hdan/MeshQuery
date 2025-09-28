@@ -148,7 +148,7 @@
                 <label class="form-check-label" for="tracerouteLinksCheckbox">Traceroute Links</label>
             </div>
             <div class="form-check mt-1">
-                <input class="form-check-input" type="checkbox" id="packetLinksCheckbox">
+                <input class="form-check-input" type="checkbox" id="packetLinksCheckbox" checked>
                 <label class="form-check-label" for="packetLinksCheckbox">Packet Links</label>
             </div>
         </div>
@@ -514,7 +514,7 @@ let allTracerouteLinks = [];
 let allPacketLinks = [];
 let selectedNodeId = null;
 let showTracerouteLinks = true;
-let showPacketLinks = false;
+let showPacketLinks = true;
 let precisionCircle = null;
 let searchResults = [];
 let allNodes = [];
@@ -1778,7 +1778,10 @@ function startAutoRefresh() {
 
     autoRefreshInterval = setInterval(async () => {
         if (isAutoRefreshEnabled) {
-            console.log('Auto-refreshing map data...');
+            // Only log occasionally to reduce spam
+            if (Math.random() < 0.1) { // 10% chance to log
+                console.log('Auto-refreshing map data...');
+            }
             await refreshMapData();
         }
     }, 3000); // 3 seconds
@@ -1851,7 +1854,10 @@ async function refreshMapData() {
             }
         }
 
-        console.log('Map data refreshed successfully');
+        // Only log occasionally to reduce spam
+        if (Math.random() < 0.1) { // 10% chance to log
+            console.log('Map data refreshed successfully');
+        }
 
     } catch (error) {
         console.error('Error refreshing map data:', error);

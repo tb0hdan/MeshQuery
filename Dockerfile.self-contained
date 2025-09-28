@@ -1,0 +1,101 @@
+# syntax=docker/dockerfile:1.7
+FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim AS base
+
+# Install PostgreSQL, supervisor, and other dependencies
+RUN apt-get update && apt-get install -y \
+    postgresql \
+    postgresql-client \
+    supervisor \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set up PostgreSQL
+RUN mkdir -p /var/lib/postgresql/data \
+    && chown -R postgres:postgres /var/lib/postgresql/data \
+    && chmod 700 /var/lib/postgresql/data \
+    && mkdir -p /var/log/supervisor \
+    && chown -R postgres:postgres /var/log/supervisor
+
+WORKDIR /app
+ENV UV_SYSTEM_PYTHON=1 PIP_NO_CACHE_DIR=1 PYTHONUNBUFFERED=1
+
+# Bring in manifests if present
+COPY pyproject.toml uv.lock* requirements*.txt LICENSE README.md ./
+
+# Install dependencies (robust to lock/no-lock)
+RUN --mount=type=cache,target=/root/.cache/uv \
+    if [ -f pyproject.toml ] && [ -f uv.lock ]; then \
+        echo "===> uv sync (locked)"; \
+        uv sync --frozen --no-dev; \
+    elif [ -f requirements.txt ]; then \
+        echo "===> uv pip install -r requirements.txt"; \
+        uv pip install -r requirements.txt; \
+    elif [ -f pyproject.toml ]; then \
+        echo "===> uv pip install . (no lock)"; \
+        if [ ! -f LICENSE ]; then echo "MIT License (placeholder for build)" > LICENSE; fi; \
+        if [ ! -f README.md ] && [ ! -f README.rst ]; then echo "# Placeholder README" > README.md; fi; \
+        uv pip install .; \
+    else \
+        echo "No pyproject.toml or requirements.txt found"; \
+        exit 1; \
+    fi
+
+# Copy whole repo (covers package-at-root, src/, malla/src/)
+COPY . /app
+ENV PYTHONPATH=/app:/app/src:/app/malla/src
+
+# Create supervisor configuration
+RUN mkdir -p /etc/supervisor/conf.d
+
+# Create supervisor configuration file
+COPY <<EOF /etc/supervisor/conf.d/malla.conf
+[supervisord]
+nodaemon=true
+user=root
+logfile=/var/log/supervisor/supervisord.log
+pidfile=/var/run/supervisord.pid
+
+# PostgreSQL is started by the startup script, not supervisor
+
+[program:malla-capture]
+command=python -m malla.mqtt_capture
+directory=/app
+user=root
+autostart=true
+autorestart=true
+stderr_logfile=/var/log/supervisor/malla-capture.err.log
+stdout_logfile=/var/log/supervisor/malla-capture.out.log
+environment=PYTHONPATH="/app:/app/src:/app/malla/src"
+
+[program:malla-web]
+command=python -m malla.wsgi
+directory=/app
+user=root
+autostart=true
+autorestart=true
+stderr_logfile=/var/log/supervisor/malla-web.err.log
+stdout_logfile=/var/log/supervisor/malla-web.out.log
+environment=PYTHONPATH="/app:/app/src:/app/malla/src"
+EOF
+
+# Create startup script
+RUN echo '#!/bin/bash' > /app/start.sh && \
+    echo 'set -e' >> /app/start.sh && \
+    echo 'echo "Setting up PostgreSQL permissions..."' >> /app/start.sh && \
+    echo 'chown -R postgres:postgres /var/lib/postgresql/data' >> /app/start.sh && \
+    echo 'chmod 700 /var/lib/postgresql/data' >> /app/start.sh && \
+    echo 'echo "Starting PostgreSQL..."' >> /app/start.sh && \
+    echo 'su - postgres -c "/usr/lib/postgresql/15/bin/initdb -D /var/lib/postgresql/data" || true' >> /app/start.sh && \
+    echo 'su - postgres -c "/usr/lib/postgresql/15/bin/pg_ctl -D /var/lib/postgresql/data -l /var/lib/postgresql/data/postgresql.log start" &' >> /app/start.sh && \
+    echo 'echo "Waiting for PostgreSQL..."' >> /app/start.sh && \
+    echo 'until /usr/bin/pg_isready -h localhost -p 5432 -U postgres; do sleep 1; done' >> /app/start.sh && \
+    echo 'echo "Creating database and user..."' >> /app/start.sh && \
+    echo 'su - postgres -c "/usr/bin/psql -c \"CREATE DATABASE malla;\" || true"' >> /app/start.sh && \
+    echo 'su - postgres -c "/usr/bin/psql -c \"CREATE USER malla WITH PASSWORD '\''yourpassword'\'';\" || true"' >> /app/start.sh && \
+    echo 'su - postgres -c "/usr/bin/psql -c \"GRANT ALL PRIVILEGES ON DATABASE malla TO malla;\" || true"' >> /app/start.sh && \
+    echo 'echo "PostgreSQL ready, starting supervisor..."' >> /app/start.sh && \
+    echo 'exec /usr/bin/supervisord -c /etc/supervisor/conf.d/malla.conf' >> /app/start.sh && \
+    chmod +x /app/start.sh
+
+EXPOSE 8080 5432
+ENTRYPOINT ["/app/start.sh"]

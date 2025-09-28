@@ -1,54 +1,83 @@
 services:
-  malla-capture:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${MALLA_DATABASE_NAME:-malla}
+      POSTGRES_USER: ${MALLA_DATABASE_USER:-malla}
+      POSTGRES_PASSWORD: ${MALLA_DATABASE_PASSWORD:-yourpassword}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${MALLA_DATABASE_USER:-malla} -d ${MALLA_DATABASE_NAME:-malla}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  db-init:
     build:
-      context: .          # repo root (where Dockerfile lives)
+      context: .
       dockerfile: Dockerfile
-      target: malla-capture
     environment:
       MALLA_DATABASE_HOST: postgres
       MALLA_DATABASE_PORT: 5432
-      MALLA_DATABASE_NAME: malla
-      MALLA_DATABASE_USER: malla
-      MALLA_DATABASE_PASSWORD: yourpassword
-      MALLA_MQTT_BROKER_ADDRESS: mqtt.mt.gt
-      MALLA_MQTT_PORT: 1883
-      MALLA_MQTT_USERNAME: meshdev
-      MALLA_MQTT_PASSWORD: large4cats
-    depends_on: [postgres, mqtt]
+      MALLA_DATABASE_NAME: ${MALLA_DATABASE_NAME:-malla}
+      MALLA_DATABASE_USER: ${MALLA_DATABASE_USER:-malla}
+      MALLA_DATABASE_PASSWORD: ${MALLA_DATABASE_PASSWORD:-yourpassword}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["/bin/sh","-lc","python -c 'from malla.database.connection_postgres import create_postgres_schema; create_postgres_schema(); print(\"schema ok\")'"]
+    restart: "no"
+
+  malla-capture:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      MALLA_DATABASE_HOST: postgres
+      MALLA_DATABASE_PORT: 5432
+      MALLA_DATABASE_NAME: ${MALLA_DATABASE_NAME:-malla}
+      MALLA_DATABASE_USER: ${MALLA_DATABASE_USER:-malla}
+      MALLA_DATABASE_PASSWORD: ${MALLA_DATABASE_PASSWORD:-yourpassword}
+      MALLA_MQTT_BROKER_ADDRESS: ${MALLA_MQTT_BROKER_ADDRESS:-mqtt.mt.gt}
+      MALLA_MQTT_PORT: ${MALLA_MQTT_PORT:-1883}
+      MALLA_MQTT_USERNAME: ${MALLA_MQTT_USERNAME:-meshdev}
+      MALLA_MQTT_PASSWORD: ${MALLA_MQTT_PASSWORD:-large4cats}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+    command: ["python","-m","malla.mqtt_capture"]
     restart: unless-stopped
 
   malla-web:
     build:
       context: .
       dockerfile: Dockerfile
-      target: malla-web
     environment:
       MALLA_DATABASE_HOST: postgres
       MALLA_DATABASE_PORT: 5432
-      MALLA_DATABASE_NAME: malla
-      MALLA_DATABASE_USER: malla
-      MALLA_DATABASE_PASSWORD: yourpassword
-    ports: ["8080:8080"]
-    depends_on: [postgres]
-    restart: unless-stopped
-
-  postgres:
-    image: postgres:16
-    environment:
-      POSTGRES_DB: malla
-      POSTGRES_USER: malla
-      POSTGRES_PASSWORD: yourpassword
-    volumes:
-      - pgdata:/var/lib/postgresql/data
+      MALLA_DATABASE_NAME: ${MALLA_DATABASE_NAME:-malla}
+      MALLA_DATABASE_USER: ${MALLA_DATABASE_USER:-malla}
+      MALLA_DATABASE_PASSWORD: ${MALLA_DATABASE_PASSWORD:-yourpassword}
+      MALLA_WEB_HOST: 0.0.0.0
+      MALLA_WEB_PORT: 8080
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+    ports:
+      - "8080:8080"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U malla -d malla"]
+      test: ["CMD-SHELL","curl -fsS http://localhost:8080/ >/dev/null || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 10
-
-  mqtt:
-    image: eclipse-mosquitto:2
-    ports: ["1883:1883"]
+      retries: 12
+    command: ["gunicorn","-w","2","-k","gthread","-b","0.0.0.0:8080","malla.wsgi:get_application()"]
+    restart: unless-stopped
 
 volumes:
   pgdata:

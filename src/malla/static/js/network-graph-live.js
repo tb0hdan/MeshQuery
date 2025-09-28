@@ -96,8 +96,25 @@ class NetworkGraph {
         const invalidLinks = [];
 
         this.links.forEach(link => {
-            const sourceNode = this.nodes.find(node => node.id === link.source);
-            const destNode = this.nodes.find(node => node.id === link.destination);
+            // Try multiple ways to match nodes
+            let sourceNode = this.nodes.find(node => node.id === link.source);
+            let destNode = this.nodes.find(node => node.id === link.destination);
+
+            // If not found, try matching by string conversion
+            if (!sourceNode) {
+                sourceNode = this.nodes.find(node => String(node.id) === String(link.source));
+            }
+            if (!destNode) {
+                destNode = this.nodes.find(node => String(node.id) === String(link.destination));
+            }
+
+            // If still not found, try matching by from_node_id/to_node_id
+            if (!sourceNode && link.from_node_id) {
+                sourceNode = this.nodes.find(node => node.id === link.from_node_id);
+            }
+            if (!destNode && link.to_node_id) {
+                destNode = this.nodes.find(node => node.id === link.to_node_id);
+            }
 
             if (sourceNode && destNode) {
                 validLinks.push({
@@ -109,6 +126,8 @@ class NetworkGraph {
                 invalidLinks.push({
                     source: link.source,
                     destination: link.destination,
+                    from_node_id: link.from_node_id,
+                    to_node_id: link.to_node_id,
                     missingSource: !sourceNode,
                     missingDest: !destNode
                 });
@@ -174,8 +193,11 @@ class NetworkGraph {
             .append('text')
             .attr('text-anchor', 'middle')
             .attr('dy', 4)
-            .attr('font-size', '10px')
+            .attr('font-size', '14px')
+            .attr('font-weight', 'bold')
             .attr('fill', '#fff')
+            .attr('stroke', '#000')
+            .attr('stroke-width', '0.5px')
             .text(d => this.getNodeLabel(d));
 
         // Add interactivity

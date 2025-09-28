@@ -1,6 +1,66 @@
 """
 Tier B Write-Optimized Pipeline Database Schema
+"""
 
+def _ensure_longest_links_materialized_views(conn, cursor):
+    """Create materialized views for longest RF distances (single-hop and multi-hop). Idempotent."""
+    # Create single-hop MV if missing
+    cursor.execute("""
+    DO $$
+    BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_matviews WHERE matviewname = 'longest_singlehop_mv') THEN
+            CREATE MATERIALIZED VIEW longest_singlehop_mv AS
+            SELECT
+                th.from_node_id,
+                th.to_node_id,
+                -- use max distance observed between the pair
+                MAX(th.distance_km) AS max_distance_km,
+                -- best (max) SNR seen in that direction over time
+                MAX(th.snr) AS best_snr,
+                COUNT(*) AS hop_count,
+                MAX(to_timestamp(th.timestamp)) AS last_seen
+            FROM traceroute_hops th
+            WHERE th.distance_km IS NOT NULL
+            GROUP BY th.from_node_id, th.to_node_id;
+            CREATE INDEX IF NOT EXISTS idx_singlehop_mv_pair ON longest_singlehop_mv (from_node_id, to_node_id);
+            CREATE INDEX IF NOT EXISTS idx_singlehop_mv_distance ON longest_singlehop_mv (max_distance_km DESC);
+        END IF;
+    END$$;
+    """)
+    # Create multi-hop MV if missing: collapse routes into source/dest extremes and max path distance
+    cursor.execute("""
+    DO $$
+    BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_matviews WHERE matviewname = 'longest_multihop_mv') THEN
+            CREATE MATERIALIZED VIEW longest_multihop_mv AS
+            WITH hop_sets AS (
+                SELECT
+                    packet_id,
+                    MIN(from_node_id) FILTER (WHERE hop_order = 0) AS source_id,
+                    MAX(to_node_id)   FILTER (WHERE hop_order = (SELECT MAX(h2.hop_order) FROM traceroute_hops h2 WHERE h2.packet_id = h.packet_id)) AS dest_id,
+                    SUM(distance_km) AS path_distance_km,
+                    MAX(snr) AS best_snr,
+                    MAX(to_timestamp(timestamp)) AS last_seen
+                FROM traceroute_hops h
+                GROUP BY packet_id
+            )
+            SELECT
+                source_id,
+                dest_id,
+                MAX(path_distance_km) AS max_path_distance_km,
+                MAX(best_snr) AS best_snr,
+                COUNT(*) AS route_count,
+                MAX(last_seen) AS last_seen
+            FROM hop_sets
+            WHERE source_id IS NOT NULL AND dest_id IS NOT NULL
+            GROUP BY source_id, dest_id;
+            CREATE INDEX IF NOT EXISTS idx_multihop_mv_pair ON longest_multihop_mv (source_id, dest_id);
+            CREATE INDEX IF NOT EXISTS idx_multihop_mv_distance ON longest_multihop_mv (max_path_distance_km DESC);
+        END IF;
+    END$$;
+    """)
+
+"""
 This module contains the database schema for the Tier B write-optimized pipeline
 that moves heavy computation to the database level for much better performance.
 

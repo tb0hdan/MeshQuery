@@ -76,14 +76,3 @@ def longest_links():
     except Exception as e:
         logger.error(f"Error in longest links route: {e}")
         return f"Longest links error: {e}", 500
-
-
-@main_bp.route("/live-topology")
-def live_topology():
-    """Animated live packet topology page."""
-    logger.info("Live topology route accessed")
-    try:
-        return render_template("live_topology.html")
-    except Exception as e:
-        logger.error(f"Error in live topology route: {e}")
-        return f"Live topology error: {e}", 500

@@ -930,7 +930,24 @@ def decode_protobuf_payload(packet: dict[str, Any]) -> dict[str, Any] | None:
 
         # Create and parse the protobuf message
         message = message_class()
-        message.ParseFromString(raw_payload)
+
+        # Ensure raw_payload is bytes, not string
+        if isinstance(raw_payload, str):
+            # If it's a hex string, decode it
+            if raw_payload.startswith("0x") or all(
+                c in "0123456789abcdefABCDEF" for c in raw_payload
+            ):
+                payload_bytes = bytes.fromhex(raw_payload)
+            else:
+                # If it's a regular string, encode it as UTF-8
+                payload_bytes = raw_payload.encode("utf-8")
+        elif isinstance(raw_payload, memoryview):
+            # Convert memoryview to bytes
+            payload_bytes = bytes(raw_payload)
+        else:
+            payload_bytes = raw_payload
+
+        message.ParseFromString(payload_bytes)
 
         # Convert to dictionary using generic reflection
         result = protobuf_message_to_dict(message)

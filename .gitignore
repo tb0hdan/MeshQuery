@@ -259,9 +259,61 @@ local-*.py
 # Project-specific files that should be ignored
 .env
 .envrc
+.env.local
+.env.production
+.env.development
 .python-version
 .vscode/
 .cursor/
 .screenshots/
 .github/
 .pre-commit-config.yaml
+
+# Docker and container files
+docker-compose.override.yml
+docker-compose.local.yml
+docker-compose.production.yml
+
+# Database files and backups
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+meshtastic_history.db
+
+# Log files
+*.log
+app.log
+backfill_mesh_packet_ids.log
+
+# Temporary and cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.coverage
+.pytest_cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Editor and IDE files
+*.swp
+*.swo
+*~
+.#*
+\#*#
+.*.swp
+.*.swo
