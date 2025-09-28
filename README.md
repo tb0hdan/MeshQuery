@@ -1,6 +1,6 @@
 # Malla - Docker-Enhanced Meshtastic Network Analyzer
 
-This is a Docker-enhanced continuation of the original [Malla project](https://github.com/n30nex/malla) - a comprehensive web analyzer for Meshtastic networks based on MQTT data.
+This is a Docker-enhanced continuation of the original [Malla project](https://github.com/zenitraM/malla) - a comprehensive web analyzer for Meshtastic networks based on MQTT data.
 
 ## ✅ Current Status: Fully Functional
 
@@ -25,8 +25,8 @@ This enhanced version provides a complete Docker-based deployment with PostgreSQ
 
 ```bash
 # Clone the repository
-git clone https://github.com/n30nex/malla.git
-cd malla
+git clone https://github.com/n30nex/MeshQuery
+cd MeshQuery
 
 # Start all services (PostgreSQL, MQTT, Web UI, Data Capture)
 docker-compose up --build
