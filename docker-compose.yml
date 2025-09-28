@@ -1,0 +1,54 @@
+services:
+  malla-capture:
+    build:
+      context: .          # repo root (where Dockerfile lives)
+      dockerfile: Dockerfile
+      target: malla-capture
+    environment:
+      MALLA_DATABASE_HOST: postgres
+      MALLA_DATABASE_PORT: 5432
+      MALLA_DATABASE_NAME: malla
+      MALLA_DATABASE_USER: malla
+      MALLA_DATABASE_PASSWORD: yourpassword
+      MALLA_MQTT_BROKER_ADDRESS: mqtt.mt.gt
+      MALLA_MQTT_PORT: 1883
+      MALLA_MQTT_USERNAME: meshdev
+      MALLA_MQTT_PASSWORD: large4cats
+    depends_on: [postgres, mqtt]
+    restart: unless-stopped
+
+  malla-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: malla-web
+    environment:
+      MALLA_DATABASE_HOST: postgres
+      MALLA_DATABASE_PORT: 5432
+      MALLA_DATABASE_NAME: malla
+      MALLA_DATABASE_USER: malla
+      MALLA_DATABASE_PASSWORD: yourpassword
+    ports: ["8080:8080"]
+    depends_on: [postgres]
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: malla
+      POSTGRES_USER: malla
+      POSTGRES_PASSWORD: yourpassword
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U malla -d malla"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  mqtt:
+    image: eclipse-mosquitto:2
+    ports: ["1883:1883"]
+
+volumes:
+  pgdata:

@@ -1,0 +1,35 @@
+
+{% extends "base.html" %}
+{% block title %}Live Packets - {{ APP_NAME }}{% endblock %}
+{% block content %}
+<div class="container-fluid">
+  <div class="row mb-3">
+    <div class="col">
+      <div class="alert alert-info">
+        Live updates connected. Events received: <strong id="liveCounter">0</strong>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header"><h5 class="card-title mb-0">Live Packet Feed</h5></div>
+    <div class="card-body">
+      <ul id="liveList" class="list-group"></ul>
+    </div>
+  </div>
+</div>
+<script src="{{ url_for('static', filename='js/live_stream.js') }}"></script>
+<script>
+  const list = document.getElementById('liveList');
+  window.addEventListener('malla:live-packet', (ev)=>{
+    const d = ev.detail || {};
+    const li = document.createElement('li');
+    li.className = 'list-group-item';
+    const ts = d.ts ? new Date(d.ts*1000).toLocaleTimeString() : new Date().toLocaleTimeString();
+    li.textContent = `[${ts}] ${d.from||''}→${d.to||''} pn=${d.portnum||''} rssi=${d.rssi||''} snr=${d.snr||''}`;
+    list.prepend(li);
+    while (list.children.length > 200) list.removeChild(list.lastChild);
+    const counter = document.getElementById('liveCounter');
+    if (counter) counter.textContent = String((parseInt(counter.textContent||'0')||0)+1);
+  });
+</script>
+{% endblock %}
