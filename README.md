@@ -1,18 +1,6 @@
 # Malla - Docker-Enhanced Meshtastic Network Analyzer
 
-This is a Docker-enhanced continuation of the original [Malla project](https://github.com/n30nex/malla) - a comprehensive web analyzer for Meshtastic networks based on MQTT data.
-
-## ⚠️ Current Status: Critical Issues Identified
-
-**The system has several critical issues that need immediate attention:**
-
-### 🚨 Known Issues
-- ❌ **Live Animations**: Network Graph live animations completely broken due to database schema mismatch
-- ❌ **Longest Links Complete Paths**: Not working - only Single RF Hops functional
-- ❌ **Database Schema**: Missing `hop_count` column causing stream route failures
-- ❌ **Stream Route**: Continuous errors every 250ms due to schema mismatch
-- ⚠️ **MQTT Connection**: Frequent disconnections from broker
-
+This is a Docker-enhanced continuation of the original [Malla project](https://github.com/zenitraM/malla) - a comprehensive web analyzer for Meshtastic networks based on MQTT data.
 ### 🔧 What's Working
 - ✅ Single RF Hops in Longest Links analysis
 - ✅ Basic web interface loading
@@ -32,8 +20,8 @@ This enhanced version provides a complete Docker-based deployment with PostgreSQ
 
 ```bash
 # Clone the repository
-git clone https://github.com/n30nex/malla.git
-cd malla
+git clone https://github.com/n30nex/MeshQuery
+cd MeshQuery
 
 # Start all services (PostgreSQL, MQTT, Web UI, Data Capture)
 docker-compose up --build
@@ -78,7 +66,7 @@ Key configuration options in `.env`:
 
 ```bash
 # MQTT Configuration (Required)
-MALLA_MQTT_BROker_ADDRESS=mqtt.meshtastic.org
+MALLA_MQTT_BROker_ADDRESS=mqtt.mt.gt
 MALLA_MQTT_USERNAME=meshdev
 MALLA_MQTT_PASSWORD=large4cats
 
@@ -217,14 +205,7 @@ docker stats
 
 ## 🤝 Contributing - URGENT HELP NEEDED!
 
-This project extends the original [Malla](https://github.com/n30nex/malla) with Docker enhancements. **We desperately need help fixing the PostgreSQL migration issues!**
-
-### Known Issues Requiring Help
-
-1. **Live Topology Page** - Not displaying network visualization
-2. **Longest Links Page** - Database queries failing
-3. **PostgreSQL Query Optimization** - Some queries are slow or broken
-4. **UI Components** - Several frontend components not working with new backend
+This project extends the original [Malla](https://github.com/zenitraM/malla) with Docker enhancements / dark mode toggle
 
 ### Development Setup
 
@@ -243,13 +224,6 @@ docker-compose logs malla-capture
 # Run tests (may fail due to migration issues)
 docker-compose exec malla-web python -m pytest
 ```
-
-### How to Help
-
-1. **Database Issues**: Check PostgreSQL queries in `src/malla/database/`
-2. **Frontend Issues**: Look at `src/malla/templates/` and `src/malla/static/`
-3. **API Issues**: Review `src/malla/routes/` for broken endpoints
-4. **Logs**: Check container logs for specific error messages
 
 ## 📄 License
 
@@ -275,12 +249,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-**⚠️ WARNING: This system has PostgreSQL migration issues!**
 
-While the system captures data successfully, several key features are broken. We need help fixing:
-- Live Topology visualization
-- Longest Links analysis
-- Database query optimization
-- UI component issues
-
-**Ready to help fix the issues?** Start with `docker-compose up --build` and check the logs for errors!
