@@ -10,7 +10,6 @@ This service provides comprehensive traceroute analysis functionality including:
 
 import logging
 import math
-import time
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -478,60 +477,89 @@ class TracerouteService:
         """Return longest single-hop and multi-hop links ranked by distance (km)."""
         logger.info("Computing longest links analysis (distance-based)")
         try:
+            from ..database.repositories import NodeRepository
             from ..database.schema_tier_b import get_longest_links_optimized
-            from ..database.repositories import NodeRepository, TracerouteRepository
-            from ..models.traceroute import TraceroutePacket
-            from ..utils.geo_utils import calculate_distance
 
             # Get single-hop links with error handling
             try:
                 single_hop_links = get_longest_links_optimized(
-                    min_distance_km=min_distance_km, min_snr=min_snr, max_results=max_results, hours=168
+                    min_distance_km=min_distance_km,
+                    min_snr=min_snr,
+                    max_results=max_results,
+                    hours=168,
                 )
                 logger.info(f"Retrieved {len(single_hop_links)} single-hop links")
             except Exception as e:
                 logger.error(f"Error getting single-hop links: {e}")
                 single_hop_links = []
 
-            # Get multi-hop links using optimized approach
+            # Get multi-hop links using direct query approach
             multi_hop_links = []
             try:
-                # Query the longest_multihop_mv materialized view directly
-                from ..database.connection_postgres import get_postgres_connection, get_postgres_cursor
+                from ..database.connection_postgres import (
+                    get_postgres_connection,
+                    get_postgres_cursor,
+                )
+
                 conn = get_postgres_connection()
                 cursor = get_postgres_cursor(conn)
 
-                cursor.execute("""
+                # Query traceroute hops directly to build multi-hop paths
+                cursor.execute(
+                    """
+                    WITH hop_sets AS (
+                        SELECT
+                            packet_id,
+                            MIN(from_node_id) FILTER (WHERE hop_order = 0) AS source_id,
+                            MAX(to_node_id) FILTER (WHERE hop_order = (SELECT MAX(h2.hop_order) FROM traceroute_hops h2 WHERE h2.packet_id = h.packet_id)) AS dest_id,
+                            SUM(distance_km) AS path_distance_km,
+                            MAX(snr) AS best_snr,
+                            MAX(to_timestamp(timestamp)) AS last_seen,
+                            COUNT(*) as hop_count
+                        FROM traceroute_hops h
+                        WHERE timestamp >= NOW() - MAKE_INTERVAL(hours => %s)
+                        AND distance_km IS NOT NULL
+                        GROUP BY packet_id
+                        HAVING COUNT(*) > 1  -- Only multi-hop paths
+                    )
                     SELECT
                         source_id as from_node_id,
                         dest_id as to_node_id,
-                        max_path_distance_km as total_distance_km,
-                        route_count as hop_count,
-                        NULL as avg_snr,  -- SNR not available in multihop view
-                        last_seen
-                    FROM longest_multihop_mv
-                    WHERE last_seen >= NOW() - MAKE_INTERVAL(hours => %s)
-                    ORDER BY max_path_distance_km DESC
+                        MAX(path_distance_km) as total_distance_km,
+                        MAX(hop_count) as hop_count,
+                        MAX(best_snr) as avg_snr,
+                        MAX(last_seen) as last_seen
+                    FROM hop_sets
+                    WHERE source_id IS NOT NULL AND dest_id IS NOT NULL
+                    AND path_distance_km > %s
+                    GROUP BY source_id, dest_id
+                    ORDER BY total_distance_km DESC
                     LIMIT %s
-                """, (168, max_results))
+                """,
+                    (168, min_distance_km, max_results),
+                )
 
                 multi_hop_data = cursor.fetchall()
                 conn.close()
 
-                logger.info(f"Retrieved {len(multi_hop_data)} multi-hop links from materialized view")
+                logger.info(
+                    f"Retrieved {len(multi_hop_data)} multi-hop links from direct query"
+                )
 
                 # Convert to the expected format
                 for link in multi_hop_data:
-                    multi_hop_links.append({
-                        "from_node_id": link[0],
-                        "to_node_id": link[1],
-                        "total_distance_km": link[2] or 0,
-                        "hop_count": link[3] or 0,
-                        "avg_snr": link[4] or 0,
-                        "route_preview": [],  # Not available in materialized view
-                        "last_seen": link[5],
-                        "packet_id": 0,  # Not available in materialized view
-                    })
+                    multi_hop_links.append(
+                        {
+                            "from_node_id": link[0],
+                            "to_node_id": link[1],
+                            "total_distance_km": link[2] or 0,
+                            "hop_count": link[3] or 0,
+                            "avg_snr": link[4] or 0,
+                            "route_preview": [],  # Not available in direct query
+                            "last_seen": link[5],
+                            "packet_id": 0,  # Not available in direct query
+                        }
+                    )
 
             except Exception as e:
                 logger.error(f"Error getting multi-hop links data: {e}")
@@ -539,9 +567,13 @@ class TracerouteService:
 
             # Sort by distance to find the longest
             if single_hop_links:
-                single_hop_links.sort(key=lambda x: x.get('distance_km', 0) or 0, reverse=True)
+                single_hop_links.sort(
+                    key=lambda x: x.get("distance_km", 0) or 0, reverse=True
+                )
             if multi_hop_links:
-                multi_hop_links.sort(key=lambda x: x.get('total_distance_km', 0) or 0, reverse=True)
+                multi_hop_links.sort(
+                    key=lambda x: x.get("total_distance_km", 0) or 0, reverse=True
+                )
 
             # Get node names with error handling
             try:
@@ -558,11 +590,19 @@ class TracerouteService:
 
                 # Add node names to links
                 for link in single_hop_links:
-                    link["from_node_name"] = node_names.get(link["from_node_id"], f"!{link['from_node_id']:08x}")
-                    link["to_node_name"] = node_names.get(link["to_node_id"], f"!{link['to_node_id']:08x}")
+                    link["from_node_name"] = node_names.get(
+                        link["from_node_id"], f"!{link['from_node_id']:08x}"
+                    )
+                    link["to_node_name"] = node_names.get(
+                        link["to_node_id"], f"!{link['to_node_id']:08x}"
+                    )
                 for link in multi_hop_links:
-                    link["from_node_name"] = node_names.get(link["from_node_id"], f"!{link['from_node_id']:08x}")
-                    link["to_node_name"] = node_names.get(link["to_node_id"], f"!{link['to_node_id']:08x}")
+                    link["from_node_name"] = node_names.get(
+                        link["from_node_id"], f"!{link['from_node_id']:08x}"
+                    )
+                    link["to_node_name"] = node_names.get(
+                        link["to_node_id"], f"!{link['to_node_id']:08x}"
+                    )
             except Exception as e:
                 logger.error(f"Error getting node names: {e}")
                 # Use fallback names
@@ -573,14 +613,18 @@ class TracerouteService:
                     link["from_node_name"] = f"!{link['from_node_id']:08x}"
                     link["to_node_name"] = f"!{link['to_node_id']:08x}"
 
-
-            longest_direct_distance = 'N/A'
-            if single_hop_links and single_hop_links[0].get('distance_km') is not None:
+            longest_direct_distance = "N/A"
+            if single_hop_links and single_hop_links[0].get("distance_km") is not None:
                 longest_direct_distance = f"{single_hop_links[0]['distance_km']:.2f} km"
 
-            longest_path_distance = 'N/A'
-            if multi_hop_links and multi_hop_links[0].get('total_distance_km') is not None:
-                longest_path_distance = f"{multi_hop_links[0]['total_distance_km']:.2f} km"
+            longest_path_distance = "N/A"
+            if (
+                multi_hop_links
+                and multi_hop_links[0].get("total_distance_km") is not None
+            ):
+                longest_path_distance = (
+                    f"{multi_hop_links[0]['total_distance_km']:.2f} km"
+                )
 
             result = {
                 "summary": {
@@ -593,7 +637,9 @@ class TracerouteService:
                 "indirect_links": multi_hop_links,
             }
 
-            logger.info(f"Longest links analysis completed: {len(single_hop_links)} direct, {len(multi_hop_links)} indirect")
+            logger.info(
+                f"Longest links analysis completed: {len(single_hop_links)} direct, {len(multi_hop_links)} indirect"
+            )
             return result
 
         except Exception as e:
@@ -608,7 +654,7 @@ class TracerouteService:
                 },
                 "direct_links": [],
                 "indirect_links": [],
-                "error": str(e)
+                "error": str(e),
             }
 
     @staticmethod

@@ -2,6 +2,7 @@
 Tier B Write-Optimized Pipeline Database Schema
 """
 
+
 def _ensure_longest_links_materialized_views(conn, cursor):
     """Create materialized views for longest RF distances (single-hop and multi-hop). Idempotent."""
     # Create single-hop MV if missing
@@ -59,6 +60,7 @@ def _ensure_longest_links_materialized_views(conn, cursor):
         END IF;
     END$$;
     """)
+
 
 """
 This module contains the database schema for the Tier B write-optimized pipeline
@@ -214,9 +216,14 @@ def refresh_longest_links_materialized_views() -> None:
         conn = get_postgres_connection()
         cursor = get_postgres_cursor(conn)
 
+        # First, ensure the materialized views exist
+        _ensure_longest_links_materialized_views(conn, cursor)
+
         # Refresh single-hop view
         try:
-            cursor.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY longest_singlehop_mv")
+            cursor.execute(
+                "REFRESH MATERIALIZED VIEW CONCURRENTLY longest_singlehop_mv"
+            )
             logger.info("longest_singlehop_mv refreshed successfully")
         except Exception as e:
             logger.warning(f"Could not refresh longest_singlehop_mv: {e}")
@@ -316,7 +323,9 @@ def get_longest_links_optimized(
             cursor.execute(position_query, (list(node_ids),))
             position_results = cursor.fetchall()
 
-            logger.info(f"Found {len(position_results)} position records for {len(node_ids)} nodes")
+            logger.info(
+                f"Found {len(position_results)} position records for {len(node_ids)} nodes"
+            )
 
             # Parse position data from protobuf
             for pos_row in position_results:
@@ -332,7 +341,9 @@ def get_longest_links_optimized(
                             "longitude": position.longitude_i / 10000000.0,
                             "altitude": position.altitude if position.altitude else 0,
                         }
-                        logger.debug(f"Position for node {pos_row['from_node_id']}: {positions[pos_row['from_node_id']]}")
+                        logger.debug(
+                            f"Position for node {pos_row['from_node_id']}: {positions[pos_row['from_node_id']]}"
+                        )
                 except Exception as e:
                     logger.warning(
                         f"Failed to parse position for node {pos_row['from_node_id']}: {e}"
