@@ -71,7 +71,12 @@ def main():
         # Configure Gunicorn
         gunicorn_config = {
             "bind": f"{cfg.host}:{cfg.port}",
-            "workers": None,  # Let Gunicorn auto-detect based on CPU cores
+            # Use a single worker to avoid duplicate initialization and logging across
+            # multiple worker processes.  The autoscaling based on CPU cores is
+            # disabled to reduce duplicate logs and duplicate background refresh
+            # threads.  If you need higher throughput, increase this value with
+            # caution and consider externalizing shared initialization state.
+            "workers": 1,
             "worker_class": "sync",
             "worker_connections": 1000,
             "max_requests": 1000,

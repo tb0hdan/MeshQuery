@@ -104,7 +104,10 @@
     bottom: 0;
     display: flex;
     background: #f8f9fa;
-    z-index: 1;
+    /* Place the table container below the navbar and allow interactive
+       elements outside of it (e.g. nav links) to remain clickable by
+       lowering the z-index. */
+    z-index: 0;
 }
 
 /* Dark mode table container */

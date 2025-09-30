@@ -130,9 +130,12 @@ def create_tier_b_schema() -> None:
             except Exception as e:
                 logger.warning(f"Could not create index: {e}")
 
+        # Drop materialized view if it exists to ensure we can create it with a unique index
+        cursor.execute("DROP MATERIALIZED VIEW IF EXISTS longest_links_mv")
+
         # Create materialized view for longest links aggregation
         cursor.execute("""
-            CREATE MATERIALIZED VIEW IF NOT EXISTS longest_links_mv AS
+            CREATE MATERIALIZED VIEW longest_links_mv AS
             WITH agg AS (
                 SELECT
                     from_node_id,
@@ -148,9 +151,9 @@ def create_tier_b_schema() -> None:
             SELECT * FROM agg
         """)
 
-        # Create index on materialized view
+        # Create unique index on materialized view for concurrent refresh
         cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_ll_mv_pair ON longest_links_mv (from_node_id, to_node_id)
+            CREATE UNIQUE INDEX idx_ll_mv_pair ON longest_links_mv (from_node_id, to_node_id)
         """)
 
         # Create index for sorting by count and SNR
@@ -186,8 +189,8 @@ def refresh_longest_links_mv() -> None:
         conn = get_postgres_connection()
         cursor = get_postgres_cursor(conn)
 
-        # Use regular refresh (CONCURRENTLY requires a unique index)
-        cursor.execute("REFRESH MATERIALIZED VIEW longest_links_mv")
+        # Use concurrent refresh to avoid locking the view
+        cursor.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY longest_links_mv")
 
         conn.commit()
         conn.close()
@@ -196,6 +199,49 @@ def refresh_longest_links_mv() -> None:
 
     except Exception as e:
         logger.error(f"Failed to refresh longest_links_mv: {e}")
+        # Don't raise - this is a background operation
+
+
+def refresh_longest_links_materialized_views() -> None:
+    """
+    Refresh all longest links materialized views.
+
+    This should be called periodically to keep the materialized views up to date.
+    """
+    logger.info("Refreshing all longest links materialized views")
+
+    try:
+        conn = get_postgres_connection()
+        cursor = get_postgres_cursor(conn)
+
+        # Refresh single-hop view
+        try:
+            cursor.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY longest_singlehop_mv")
+            logger.info("longest_singlehop_mv refreshed successfully")
+        except Exception as e:
+            logger.warning(f"Could not refresh longest_singlehop_mv: {e}")
+
+        # Refresh multi-hop view
+        try:
+            cursor.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY longest_multihop_mv")
+            logger.info("longest_multihop_mv refreshed successfully")
+        except Exception as e:
+            logger.warning(f"Could not refresh longest_multihop_mv: {e}")
+
+        # Refresh general longest links view
+        try:
+            cursor.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY longest_links_mv")
+            logger.info("longest_links_mv refreshed successfully")
+        except Exception as e:
+            logger.warning(f"Could not refresh longest_links_mv: {e}")
+
+        conn.commit()
+        conn.close()
+
+        logger.info("All longest links materialized views refreshed successfully")
+
+    except Exception as e:
+        logger.error(f"Failed to refresh longest links materialized views: {e}")
         # Don't raise - this is a background operation
 
 
@@ -239,7 +285,7 @@ def get_longest_links_optimized(
             ll.first_seen
         FROM longest_links_mv ll
         WHERE ll.avg_snr >= %s
-        AND ll.last_seen >= NOW() - INTERVAL '%s hours'
+        AND ll.last_seen >= NOW() - MAKE_INTERVAL(hours => %s)
         ORDER BY ll.traceroute_count DESC, ll.avg_snr DESC
         LIMIT %s
         """
@@ -270,6 +316,8 @@ def get_longest_links_optimized(
             cursor.execute(position_query, (list(node_ids),))
             position_results = cursor.fetchall()
 
+            logger.info(f"Found {len(position_results)} position records for {len(node_ids)} nodes")
+
             # Parse position data from protobuf
             for pos_row in position_results:
                 try:
@@ -284,13 +332,14 @@ def get_longest_links_optimized(
                             "longitude": position.longitude_i / 10000000.0,
                             "altitude": position.altitude if position.altitude else 0,
                         }
+                        logger.debug(f"Position for node {pos_row['from_node_id']}: {positions[pos_row['from_node_id']]}")
                 except Exception as e:
                     logger.warning(
                         f"Failed to parse position for node {pos_row['from_node_id']}: {e}"
                     )
 
         # Convert to expected format with real distance calculation
-        links = []
+        links: list[dict[str, Any]] = []
         for row in results:
             source_id = row["from_node_id"]
             dest_id = row["to_node_id"]
@@ -303,8 +352,8 @@ def get_longest_links_optimized(
                 dest_id, {"latitude": 0.0, "longitude": 0.0, "altitude": 0}
             )
 
-            # Calculate distance using Haversine formula
-            distance_km = None  # Unknown by default
+            # Calculate distance using the Haversine formula when coordinates are available
+            distance_km: float | None = None  # Unknown by default
             if (
                 source_pos["latitude"] != 0.0
                 and dest_pos["latitude"] != 0.0
@@ -341,8 +390,8 @@ def get_longest_links_optimized(
                 )
 
             link = {
-                "source_id": source_id,
-                "dest_id": dest_id,
+                "from_node_id": source_id,
+                "to_node_id": dest_id,
                 "distance_km": distance_km,
                 "snr": float(row["avg_snr"]) if row["avg_snr"] else None,
                 "traceroute_count": row["traceroute_count"],
@@ -354,6 +403,24 @@ def get_longest_links_optimized(
             links.append(link)
 
         conn.close()
+
+        # Apply minimum distance filter if specified.  We keep links where the
+        # distance is unknown (None) or meets/exceeds the threshold.  This
+        # filtering happens after distance calculation to ensure accuracy.
+        if min_distance_km is not None and min_distance_km > 0:
+            links = [
+                link
+                for link in links
+                if link["distance_km"] is None or link["distance_km"] >= min_distance_km
+            ]
+
+        # Sort by distance descending; if distance is None, treat as 0
+        links.sort(key=lambda x: x["distance_km"] or 0, reverse=True)
+
+        # Enforce max_results cap after filtering and sorting
+        if max_results:
+            links = links[:max_results]
+
         return links
 
     except Exception as e:

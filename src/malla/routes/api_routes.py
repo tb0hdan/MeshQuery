@@ -102,6 +102,325 @@ def api_analytics():
         return jsonify({"error": str(e)}), 500
 
 
+@api_bp.route("/packets/recent")
+def api_packets_recent():
+    """API endpoint for recent packet data (used by live pages)."""
+    logger.info("API packets recent endpoint accessed")
+    try:
+        minutes = request.args.get("minutes", 60, type=int)
+        limit = request.args.get("limit", 100, type=int)
+
+        # Calculate time range
+        from datetime import datetime, timedelta
+
+        end_time = datetime.now()
+        start_time = end_time - timedelta(minutes=minutes)
+
+        # Build filters
+        filters: dict[str, Any] = {
+            "start_time": start_time.timestamp(),
+            "end_time": end_time.timestamp(),
+        }
+
+        # Get recent packets
+        data = PacketRepository.get_packets(limit=limit, offset=0, filters=filters)
+
+        # Format for live pages (simplified structure)
+        recent_packets = []
+        for packet in data.get("packets", []):
+            recent_packets.append(
+                {
+                    "ts": packet.get("timestamp"),
+                    "src": packet.get("from_node_id"),
+                    "srcId": packet.get("from_node_id"),
+                    "dst": packet.get("to_node_id"),
+                    "dstId": packet.get("to_node_id"),
+                    "snr": packet.get("snr"),
+                    "rssi": packet.get("rssi"),
+                    "type": packet.get("portnum_name"),
+                    "portnum": packet.get("portnum"),
+                    "hop_count": packet.get("hop_count"),
+                    "gateway_id": packet.get("gateway_id"),
+                    "mesh_packet_id": packet.get("mesh_packet_id"),
+                }
+            )
+
+        return jsonify(recent_packets)
+    except Exception as e:
+        logger.error(f"Error in API packets recent: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route("/packets/stream")
+def api_packets_stream():
+    """Server-Sent Events endpoint for live packet streaming."""
+    import json
+    import time
+
+    from flask import Response, stream_with_context
+
+    def event_stream():
+        try:
+            yield "event: ping\n"
+            yield 'data: {"ok":true}\n\n'
+
+            # Simple polling fallback for SSE
+            last_packet_time = time.time()
+            while True:
+                try:
+                    # Get recent packets (last 5 seconds)
+                    from datetime import datetime, timedelta
+
+                    end_time = datetime.now()
+                    start_time = end_time - timedelta(seconds=5)
+
+                    filters = {
+                        "start_time": start_time.timestamp(),
+                        "end_time": end_time.timestamp(),
+                    }
+
+                    data = PacketRepository.get_packets(
+                        limit=10, offset=0, filters=filters
+                    )
+
+                    for packet in data.get("packets", []):
+                        # Only send packets newer than our last check
+                        packet_time = packet.get("timestamp", 0)
+                        if packet_time > last_packet_time:
+                            packet_data = {
+                                "ts": packet_time,
+                                "src": packet.get("from_node_id"),
+                                "srcId": packet.get("from_node_id"),
+                                "dst": packet.get("to_node_id"),
+                                "dstId": packet.get("to_node_id"),
+                                "snr": packet.get("snr"),
+                                "rssi": packet.get("rssi"),
+                                "type": packet.get("portnum_name"),
+                                "portnum": packet.get("portnum"),
+                                "hop_count": packet.get("hop_count"),
+                                "gateway_id": packet.get("gateway_id"),
+                                "mesh_packet_id": packet.get("mesh_packet_id"),
+                            }
+                            yield f"data: {json.dumps(packet_data)}\n\n"
+                            last_packet_time = packet_time
+
+                except Exception as e:
+                    logger.warning(f"Error in packet stream: {e}")
+
+                time.sleep(1)  # Poll every second
+
+        except Exception as e:
+            logger.error(f"SSE stream error: {e}")
+
+    headers = {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",
+    }
+    return Response(stream_with_context(event_stream()), headers=headers)
+
+
+@api_bp.route("/links")
+def api_links():
+    """API endpoint for network links data with distance filtering."""
+    logger.info("API links endpoint accessed")
+    try:
+        # Get recent traceroute links for network visualization
+        import math
+        from datetime import datetime, timedelta
+
+        # Get links from last 24 hours
+        end_time = datetime.now()
+        start_time = end_time - timedelta(hours=24)
+
+        filters = {
+            "start_time": start_time.timestamp(),
+            "end_time": end_time.timestamp(),
+            "portnum_name": "TRACEROUTE_APP",
+        }
+
+        # Get traceroute packets
+        data = TracerouteRepository.get_traceroute_packets(
+            limit=1000, offset=0, filters=filters
+        )
+
+        # Get node positions for distance calculation
+        node_positions = {}
+        try:
+            # Get recent position data for all nodes
+            position_filters = {
+                "start_time": start_time.timestamp(),
+                "end_time": end_time.timestamp(),
+                "portnum": 3,  # POSITION_APP
+            }
+            position_data = PacketRepository.get_packets(
+                limit=1000, offset=0, filters=position_filters
+            )
+
+            for packet in position_data.get("packets", []):
+                node_id = packet.get("from_node_id")
+                if node_id and packet.get("latitude") and packet.get("longitude"):
+                    node_positions[node_id] = {
+                        "lat": packet.get("latitude"),
+                        "lon": packet.get("longitude"),
+                    }
+        except Exception as e:
+            logger.warning(f"Could not get node positions: {e}")
+
+        def calculate_distance(lat1, lon1, lat2, lon2):
+            """Calculate distance between two points in kilometers."""
+            R = 6371  # Earth's radius in kilometers
+            dlat = math.radians(lat2 - lat1)
+            dlon = math.radians(lon2 - lon1)
+            a = math.sin(dlat / 2) * math.sin(dlat / 2) + math.cos(
+                math.radians(lat1)
+            ) * math.cos(math.radians(lat2)) * math.sin(dlon / 2) * math.sin(dlon / 2)
+            c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+            return R * c
+
+        # Extract unique links from traceroute data with distance filtering
+        links = []
+        seen_links = set()
+        max_distance_km = 250  # Filter out links longer than 250km
+
+        for packet in data.get("packets", []):
+            from_node = packet.get("from_node_id")
+            to_node = packet.get("to_node_id")
+
+            if from_node and to_node:
+                # Check if we have position data for both nodes
+                if from_node in node_positions and to_node in node_positions:
+                    from_pos = node_positions[from_node]
+                    to_pos = node_positions[to_node]
+
+                    # Calculate distance
+                    distance = calculate_distance(
+                        from_pos["lat"], from_pos["lon"], to_pos["lat"], to_pos["lon"]
+                    )
+
+                    # Only include links under 250km
+                    if distance <= max_distance_km:
+                        # Create bidirectional link
+                        link_key1 = (from_node, to_node)
+                        link_key2 = (to_node, from_node)
+
+                        if link_key1 not in seen_links and link_key2 not in seen_links:
+                            links.append(
+                                {
+                                    "src": from_node,
+                                    "dst": to_node,
+                                    "snr": packet.get("snr"),
+                                    "rssi": packet.get("rssi"),
+                                    "timestamp": packet.get("timestamp"),
+                                    "distance_km": round(distance, 2),
+                                }
+                            )
+                            seen_links.add(link_key1)
+                else:
+                    # If no position data, include the link (fallback for nodes without GPS)
+                    link_key1 = (from_node, to_node)
+                    link_key2 = (to_node, from_node)
+
+                    if link_key1 not in seen_links and link_key2 not in seen_links:
+                        links.append(
+                            {
+                                "src": from_node,
+                                "dst": to_node,
+                                "snr": packet.get("snr"),
+                                "rssi": packet.get("rssi"),
+                                "timestamp": packet.get("timestamp"),
+                                "distance_km": None,
+                            }
+                        )
+                        seen_links.add(link_key1)
+
+        logger.info(f"Filtered {len(links)} links (max distance: {max_distance_km}km)")
+        return jsonify(links)
+
+    except Exception as e:
+        logger.error(f"Error in API links: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route("/health")
+def api_health():
+    """Comprehensive health check endpoint."""
+    import time
+
+    import psutil
+
+    try:
+        # Check database connection
+        db_healthy = False
+        db_error = None
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+            conn.close()
+            db_healthy = True
+        except Exception as e:
+            db_error = str(e)
+
+        # Check disk space
+        disk_usage = psutil.disk_usage("/")
+        disk_free_percent = (disk_usage.free / disk_usage.total) * 100
+
+        # Check memory usage
+        memory = psutil.virtual_memory()
+
+        # Get basic stats
+        try:
+            stats = DashboardRepository.get_stats()
+            packet_count = stats.get("total_packets", 0)
+            node_count = stats.get("total_nodes", 0)
+        except Exception:
+            packet_count = 0
+            node_count = 0
+
+        checks = {
+            "database": {
+                "status": "healthy" if db_healthy else "unhealthy",
+                "error": db_error,
+            },
+            "disk_space": {
+                "status": "healthy" if disk_free_percent > 10 else "warning",
+                "free_percent": round(disk_free_percent, 2),
+            },
+            "memory": {
+                "status": "healthy" if memory.percent < 90 else "warning",
+                "usage_percent": memory.percent,
+            },
+            "application": {
+                "status": "healthy",
+                "packet_count": packet_count,
+                "node_count": node_count,
+            },
+        }
+
+        all_healthy = all(
+            check["status"] in ["healthy", "warning"] for check in checks.values()
+        )
+
+        status_code = 200 if all_healthy else 503
+
+        return jsonify(
+            {
+                "status": "healthy" if all_healthy else "unhealthy",
+                "timestamp": time.time(),
+                "checks": checks,
+            }
+        ), status_code
+
+    except Exception as e:
+        logger.error(f"Health check error: {e}")
+        return jsonify(
+            {"status": "unhealthy", "error": str(e), "timestamp": time.time()}
+        ), 503
+
+
 @api_bp.route("/packets")
 def api_packets():
     """API endpoint for packet data."""
@@ -260,27 +579,23 @@ def api_nodes_search():
                 }
             )
 
-        # Use the existing NodeRepository with search functionality
-        if db_ready:
-            try:
-                result = NodeRepository.get_nodes(
-                    limit=limit,
-                    offset=0,
-                    search=query,
-                    order_by="packet_count_24h",  # Order by activity
-                    order_dir="desc",
-                )
-                nodes = result["nodes"]
-                total_count = result["total_count"]
-            except Exception as db_error:
-                # If database call fails, start with empty list
-                logger.info(
-                    f"Database search failed, returning limited results: {db_error}"
-                )
-                nodes = []
-                total_count = 0
-        else:
-            # Database not ready, start with empty list
+        # Use the existing NodeRepository with search functionality.  The prior
+        # implementation attempted to check a `db_ready` flag that was never
+        # defined, causing a NameError.  Here we simply attempt the
+        # repository call and gracefully handle any database errors.
+        try:
+            result = NodeRepository.get_nodes(
+                limit=limit,
+                offset=0,
+                search=query,
+                order_by="packet_count_24h",  # Order by activity
+                order_dir="desc",
+            )
+            nodes = result.get("nodes", [])
+            total_count = result.get("total_count", 0)
+        except Exception as db_error:
+            # If database call fails, return empty results without crashing
+            logger.info(f"Database search failed, returning empty results: {db_error}")
             nodes = []
             total_count = 0
 
@@ -833,6 +1148,25 @@ def api_longest_links():
         return jsonify({"error": str(e)}), 500
 
 
+@api_bp.route("/longest-links/refresh", methods=["POST"])
+def api_longest_links_refresh():
+    """API endpoint for refreshing the longest links materialized view."""
+    logger.info("API longest links refresh endpoint accessed")
+    try:
+        from ..database.schema_tier_b import refresh_longest_links_materialized_views
+
+        refresh_longest_links_materialized_views()
+        return jsonify(
+            {
+                "status": "ok",
+                "message": "All longest links materialized views are refreshing.",
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error in API longest links refresh: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @api_bp.route("/traceroute-hops/nodes")
 def api_traceroute_hops_nodes():
     """API endpoint for nodes involved in traceroutes with location data."""
@@ -864,7 +1198,18 @@ def api_traceroute_hops_nodes():
         """
 
         cursor.execute(query)
-        nodes_data = [dict(row) for row in cursor.fetchall()]
+        rows = cursor.fetchall()
+        nodes_data = []
+        for row in rows:
+            nodes_data.append(
+                {
+                    "node_id": row[0],
+                    "long_name": row[1],
+                    "short_name": row[2],
+                    "hw_model": row[3],
+                    "hex_id": row[4],
+                }
+            )
         conn.close()
         db_time = time.time() - db_start
 
@@ -1284,7 +1629,7 @@ def api_packets_data():
             offset=offset,
             filters=filters,
             search=search,
-            order_by=actual_sort_by,
+            order_by=actual_sort_by or "timestamp",
             order_dir=sort_order,
             group_packets=group_packets,
         )
@@ -1623,7 +1968,7 @@ def api_traceroute_data():
             offset=offset,
             filters=filters,
             search=search,
-            order_by=actual_sort_by,
+            order_by=actual_sort_by or "timestamp",
             order_dir=sort_order,
             group_packets=group_packets,
         )
@@ -1903,6 +2248,127 @@ def api_channels():
     except Exception as e:
         logger.error(f"Error in API channels: {e}")
         return jsonify({"error": str(e), "channels": []}), 500
+
+
+@api_bp.route("/traceroute/path/<int:src_id>/<int:dst_id>")
+def api_traceroute_path(src_id, dst_id):
+    """API endpoint to get full traceroute path between two nodes."""
+    logger.info(f"API traceroute path endpoint accessed: {src_id} -> {dst_id}")
+    try:
+        from datetime import datetime, timedelta
+
+        from ..database.repositories import TracerouteRepository
+
+        # Get recent traceroute data (last 24 hours)
+        end_time = datetime.now()
+        start_time = end_time - timedelta(hours=24)
+
+        filters = {
+            "start_time": start_time.timestamp(),
+            "end_time": end_time.timestamp(),
+            "portnum_name": "TRACEROUTE_APP",
+        }
+
+        # Get all traceroute packets for this path
+        data = TracerouteRepository.get_traceroute_packets(
+            limit=1000, offset=0, filters=filters
+        )
+
+        # Filter for packets between these nodes
+        path_packets = []
+        for packet in data.get("packets", []):
+            if (
+                packet.get("from_node_id") == src_id
+                and packet.get("to_node_id") == dst_id
+            ) or (
+                packet.get("from_node_id") == dst_id
+                and packet.get("to_node_id") == src_id
+            ):
+                path_packets.append(packet)
+
+        if not path_packets:
+            return jsonify({"path": [], "message": "No traceroute data found"}), 404
+
+        # Sort by timestamp and hop count
+        path_packets.sort(key=lambda x: (x.get("timestamp", 0), x.get("hop_count", 0)))
+
+        # Build path with node positions
+        path = []
+        seen_nodes = set()
+
+        for packet in path_packets:
+            from_node = packet.get("from_node_id")
+            to_node = packet.get("to_node_id")
+
+            # Add source node
+            if from_node and from_node not in seen_nodes:
+                # Try to get node position from packet data or node info
+                lat = packet.get("from_lat") or packet.get("latitude")
+                lon = packet.get("from_lon") or packet.get("longitude")
+
+                if lat and lon:
+                    path.append(
+                        {
+                            "id": from_node,
+                            "lat": lat,
+                            "lon": lon,
+                            "name": f"Node {from_node}",
+                            "hop": packet.get("hop_count", 0),
+                        }
+                    )
+                    seen_nodes.add(from_node)
+
+            # Add destination node
+            if to_node and to_node not in seen_nodes:
+                lat = packet.get("to_lat") or packet.get("latitude")
+                lon = packet.get("to_lon") or packet.get("longitude")
+
+                if lat and lon:
+                    path.append(
+                        {
+                            "id": to_node,
+                            "lat": lat,
+                            "lon": lon,
+                            "name": f"Node {to_node}",
+                            "hop": packet.get("hop_count", 0) + 1,
+                        }
+                    )
+                    seen_nodes.add(to_node)
+
+        # If we don't have enough position data, try to get from node locations
+        if len(path) < 2:
+            from ..database.repositories import LocationRepository
+
+            try:
+                node_locations = LocationRepository.get_node_locations(
+                    {"node_ids": [src_id, dst_id]}
+                )
+
+                for loc in node_locations:
+                    if loc["node_id"] not in seen_nodes:
+                        path.append(
+                            {
+                                "id": loc["node_id"],
+                                "lat": loc["latitude"],
+                                "lon": loc["longitude"],
+                                "name": loc.get(
+                                    "display_name", f"Node {loc['node_id']}"
+                                ),
+                                "hop": 0,
+                            }
+                        )
+            except Exception as e:
+                logger.warning(f"Could not get node locations: {e}")
+
+        # Sort path by hop count
+        path.sort(key=lambda x: x.get("hop", 0))
+
+        logger.info(f"Built traceroute path with {len(path)} nodes")
+        return jsonify({"path": path, "total_hops": len(path)})
+
+    except Exception as e:
+        logger.error(f"Error in traceroute path API: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
 def safe_jsonify(data, *args, **kwargs):

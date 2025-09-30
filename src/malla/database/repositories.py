@@ -1132,6 +1132,7 @@ class NodeRepository:
                 n.hw_model,
                 n.role,
                 n.primary_channel,
+                n.mac_address,
                 COUNT(*) as total_packets,
                 MAX(p.timestamp) as last_seen,
                 MIN(p.timestamp) as first_seen,
@@ -1146,7 +1147,7 @@ class NodeRepository:
             FROM packet_history p
             LEFT JOIN node_info n ON p.from_node_id = n.node_id
             WHERE p.from_node_id = %s
-            GROUP BY p.from_node_id, n.long_name, n.short_name, n.hw_model, n.role, n.primary_channel
+            GROUP BY p.from_node_id, n.long_name, n.short_name, n.hw_model, n.role, n.primary_channel, n.mac_address
             """
 
             db.execute(query, (node_id,))
@@ -1214,6 +1215,8 @@ class NodeRepository:
                 "primary_channel": node_row["primary_channel"]
                 if "primary_channel" in node_row.keys()
                 else None,
+                # Include MAC address if available from node_info table
+                "mac_address": node_row.get("mac_address"),
                 "total_packets": node_row["total_packets"],
                 "last_seen": last_seen.strftime("%Y-%m-%d %H:%M:%S UTC"),
                 "first_seen": first_seen.strftime("%Y-%m-%d %H:%M:%S UTC"),
@@ -3104,8 +3107,10 @@ class LocationRepository:
                         continue
 
                     # Decode position from raw protobuf payload
+                    logger.debug(f"Attempting to parse protobuf for node {row['node_id']}")
                     position = mesh_pb2.Position()
                     position.ParseFromString(row["raw_payload"])
+                    logger.debug(f"Successfully parsed protobuf for node {row['node_id']}")
                     decode_count += 1
 
                     # Extract coordinates (stored as integers, need to divide by 1e7)
@@ -3116,6 +3121,8 @@ class LocationRepository:
                         position.longitude_i / 1e7 if position.longitude_i else None
                     )
                     altitude = position.altitude if position.altitude else None
+
+                    logger.debug(f"Node {row['node_id']}: lat_i={position.latitude_i}, lng_i={position.longitude_i}, lat={latitude}, lng={longitude}")
 
                     # Extract precision and satellite information
                     precision_bits = getattr(position, "precision_bits", None)
@@ -3182,6 +3189,7 @@ class LocationRepository:
                         or latitude == 0
                         or longitude == 0
                     ):
+                        logger.debug(f"Skipping node {row['node_id']}: lat={latitude}, lng={longitude}")
                         skip_count += 1
                         continue
 
@@ -3216,6 +3224,8 @@ class LocationRepository:
                     logger.warning(
                         f"Failed to parse location for node {row['node_id']}: {e}"
                     )
+                    logger.debug(f"Raw payload length: {len(row['raw_payload']) if row['raw_payload'] else 0}")
+                    logger.debug(f"Raw payload start: {row['raw_payload'][:20] if row['raw_payload'] else 'None'}")
                     skip_count += 1
                     continue
 

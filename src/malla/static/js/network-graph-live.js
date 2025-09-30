@@ -4,7 +4,13 @@
  */
 
 class NetworkGraph {
+    static MAX_CONCURRENT_ANIM = 20;
+    static PACKET_TTL_MS = 2500;
+
     constructor(selector, options = {}) {
+        this._animInFlight = 0;
+        this._animQueue = [];
+
         this.container = d3.select(selector);
         this.options = {
             width: 800,
@@ -92,6 +98,7 @@ class NetworkGraph {
         }
 
         // Resolve link source and destination references to actual node objects
+        // and attach a `target` property (alias of `destination`) for d3-force.
         const validLinks = [];
         const invalidLinks = [];
 
@@ -120,7 +127,8 @@ class NetworkGraph {
                 validLinks.push({
                     ...link,
                     source: sourceNode,
-                    destination: destNode
+                    destination: destNode,
+                    target: destNode
                 });
             } else {
                 invalidLinks.push({
@@ -178,7 +186,11 @@ class NetworkGraph {
             .enter()
             .append('g')
             .attr('class', 'node')
-            .attr('transform', d => `translate(${d.x || 0}, ${d.y || 0})`);
+            .attr('transform', d => `translate(${d.x || 0}, ${d.y || 0})`)
+            // Attach a data attribute with the node ID.  This allows external
+            // code to look up the SVG element via querySelector, which is
+            // required for live packet animations in traceroute_graph.html.
+            .attr('data-node-id', d => d.id);
 
         // Add node circles
         this.nodeElements
@@ -251,8 +263,8 @@ class NetworkGraph {
         this.linkElements
             .attr('x1', d => d.source.x)
             .attr('y1', d => d.source.y)
-            .attr('x2', d => d.destination.x)
-            .attr('y2', d => d.destination.y);
+            .attr('x2', d => (d.target ? d.target.x : (d.destination ? d.destination.x : d.source.x)))
+            .attr('y2', d => (d.target ? d.target.y : (d.destination ? d.destination.y : d.source.y)));
 
         this.nodeElements
             .attr('transform', d => `translate(${d.x}, ${d.y})`);
@@ -266,9 +278,11 @@ class NetworkGraph {
     }
 
     getNodeLabel(node) {
-        // Return short node ID or name
+        // Return a label for the node.  Prefer explicit short/long names,
+        // otherwise fall back to the `name` property, then to the hex ID.
         if (node.short_name) return node.short_name;
         if (node.long_name) return node.long_name;
+        if (node.name) return node.name;
         return `!${node.id.toString(16).padStart(8, '0')}`;
     }
 
@@ -338,53 +352,102 @@ class NetworkGraph {
     }
 
     removeLink(sourceId, destId) {
-        this.links = this.links.filter(link =>
-            !(link.source.id === sourceId && link.destination.id === destId)
-        );
+        this.links = this.links.filter(link => {
+            const srcMatches = link.source && link.source.id === sourceId;
+            const destMatches = (link.target && link.target.id === destId) ||
+                                (link.destination && link.destination.id === destId);
+            return !(srcMatches && destMatches);
+        });
         this.render();
         this.startSimulation();
     }
 
+    enqueuePacketAnimation(fn) {
+        // If under limit, run immediately; else queue
+        if (this._animInFlight < NetworkGraph.MAX_CONCURRENT_ANIM) {
+            this._animInFlight++;
+            fn(() => {
+                this._animInFlight = Math.max(0, this._animInFlight - 1);
+                // Drain queue
+                const next = this._animQueue.shift();
+                if (next) this.enqueuePacketAnimation(next);
+            });
+        } else {
+            this._animQueue.push(fn);
+        }
+    }
+    
+
     // Animation methods for live packets
     createPacketAnimation(sourceId, destId, packet) {
-        const sourceNode = this.getNode(sourceId);
-        const destNode = this.getNode(destId);
-
-        if (!sourceNode || !destNode) return null;
-
-        // Create animated packet element
-        const packetEl = this.g.append('circle')
-            .attr('class', 'packet-animation')
-            .attr('r', 4)
-            .attr('fill', '#00ff88')
-            .attr('cx', sourceNode.x)
-            .attr('cy', sourceNode.y)
-            .style('pointer-events', 'none');
-
-        // Animate to destination
-        packetEl.transition()
-            .duration(2000)
-            .attr('cx', destNode.x)
-            .attr('cy', destNode.y)
-            .on('end', () => {
-                packetEl.remove();
-            });
-
-        return packetEl;
+        // For live animations we queue packet transitions to avoid too many concurrent
+        // animations.  Each run function must call its `done` callback when finished.
+        const run = (done) => {
+            const sourceNode = this.getNode(sourceId);
+            const destNode = this.getNode(destId);
+            // If either endpoint is missing, immediately invoke done and abort
+            if (!sourceNode || !destNode) {
+                done();
+                return;
+            }
+            // Create animated packet element on the graph layer
+            const packetEl = this.g.append('circle')
+                .attr('class', 'packet-animation')
+                .attr('data-t0', performance.now())
+                .attr('r', 4)
+                .attr('fill', '#00ff88')
+                .attr('cx', sourceNode.x)
+                .attr('cy', sourceNode.y)
+                .style('pointer-events', 'none');
+            // Animate the circle to the destination
+            packetEl.transition()
+                .duration(2000)
+                .attr('cx', destNode.x)
+                .attr('cy', destNode.y)
+                .on('end', () => {
+                    try {
+                        packetEl.remove();
+                    } finally {
+                        done();
+                    }
+                });
+        };
+        // Enqueue the animation.  The packet element itself is returned for callers
+        // that might want a reference (though currently unused).
+        this.enqueuePacketAnimation(run);
     }
 
     pulseNode(nodeId) {
         const nodeElement = this.getNodeElement(nodeId);
         if (nodeElement) {
-            d3.select(nodeElement)
-                .transition()
-                .duration(500)
-                .attr('r', this.options.nodeRadius * 1.5)
-                .transition()
-                .duration(500)
-                .attr('r', this.options.nodeRadius);
+            const circle = d3.select(nodeElement).select('circle');
+            if (!circle.empty()) {
+                circle
+                    .transition()
+                    .duration(500)
+                    .attr('r', this.options.nodeRadius * 1.5)
+                    .transition()
+                    .duration(500)
+                    .attr('r', this.options.nodeRadius);
+            }
         }
     }
+
+    // Periodic GC for packet elements to avoid leaks
+    startPacketGC() {
+        if (this._gcTimer) return;
+        this._gcTimer = setInterval(() => {
+            const now = performance.now();
+            this.g.selectAll('circle.packet-animation').each(function() {
+                const el = d3.select(this);
+                const t0 = +el.attr('data-t0') || 0;
+                if (t0 && (now - t0) > NetworkGraph.PACKET_TTL_MS * 2) {
+                    try { this.remove(); } catch(_) {}
+                }
+            });
+        }, 3000);
+    }
+    
 }
 
 // Global functions for external control

@@ -42,8 +42,15 @@ db = DatabaseAdapter()
 _db_lock = threading.RLock()
 
 # Deduplication cache for logging
-_log_cache = {}
+_log_cache: dict[str, float] = {}
 _log_cache_lock = threading.Lock()
+
+# Track the last logged environment metrics per node to avoid logging the same
+# temperature/humidity values repeatedly. Without this, some nodes emit the
+# same environment telemetry at a high rate, flooding the logs. We only
+# update and log when the value actually changes. See issue discussion in
+# support thread.
+_last_env_metrics: dict[int, tuple[str, str]] = {}
 
 # Default channel key for decryption
 DEFAULT_CHANNEL_KEY = "1PG7OiApB1nwvP+rz05pAQ=="
@@ -69,13 +76,14 @@ def log_with_deduplication(message: str, cache_key: str, ttl_seconds: int = 5) -
     current_time = time.time()
 
     with _log_cache_lock:
-        # Clean old entries
-        _log_cache = {k: v for k, v in _log_cache.items() if current_time - v < 60}
+        # Clean old entries (keep entries for 2 minutes to avoid aggressive cleaning)
+        _log_cache = {k: v for k, v in _log_cache.items() if current_time - v < 120}
 
         # Check if we should log this message
         if cache_key in _log_cache:
             last_logged = _log_cache[cache_key]
             if current_time - last_logged < ttl_seconds:
+                # Skip duplicate without logging
                 return  # Skip duplicate
 
         # Log the message and update cache
@@ -375,6 +383,12 @@ def log_packet_to_database(
             ),
         )
 
+        # Send notification for live stream
+        try:
+            db.execute("NOTIFY packets, %s;", (f"packet_inserted:{current_time}",))
+        except Exception as e:
+            log.warning("Failed to send packet notification: %s", e)
+
 
 def on_connect(
     client: mqtt.Client, userdata: Any, flags: dict, rc: int, properties: Any = None
@@ -389,7 +403,7 @@ def on_connect(
 
 
 def on_disconnect(
-    client: mqtt.Client, userdata: Any, flags: dict, rc: int, properties: Any = None
+    client: mqtt.Client, userdata: Any, rc: int, properties: Any = None
 ) -> None:
     """Callback for when the client disconnects from the broker."""
     if rc != 0:
@@ -526,8 +540,18 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
 
             flags_str = f" ({', '.join(flags)})" if flags else ""
 
-            log.info(
-                f"💬 Text message from {from_node_display} to {to_node_display}{flags_str}: {text_content[:50]}{'...' if len(text_content) > 50 else ''}"
+            # Use deduplication to avoid logging the same text message multiple times in rapid succession.
+            # Use the packet ID as part of the cache key when available to ensure identical
+            # retransmissions are suppressed. Fall back to hashing the message content if ID is missing.
+            cache_key = None
+            try:
+                cache_key = f"text_{mesh_packet.id}"
+            except Exception:
+                cache_key = f"text_{from_node_id_numeric}_{hash(text_content)}"
+            log_with_deduplication(
+                f"💬 Text message from {from_node_display} to {to_node_display}{flags_str}: {text_content[:50]}{'...' if len(text_content) > 50 else ''}",
+                cache_key,
+                ttl_seconds=30,  # Suppress duplicate text messages for 30 seconds
             )
             processed_successfully = True
 
@@ -590,8 +614,12 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
             via_mqtt_str = (
                 " (via MQTT)" if getattr(mesh_packet, "via_mqtt", False) else ""
             )
-            log.info(
-                f"ℹ️ NodeInfo for {node_id_from_payload} from {from_node_display}{via_mqtt_str}: {long_name or short_name or 'No name'}"
+            cache_key = f"nodeinfo_{node_id_from_payload}"
+            message = f"ℹ️ NodeInfo for {node_id_from_payload} from {from_node_display}{via_mqtt_str}: {long_name or short_name or 'No name'}"
+            log_with_deduplication(
+                message,
+                cache_key,
+                ttl_seconds=60,  # Suppress NodeInfo duplicates for 60 seconds
             )
             processed_successfully = True
 
@@ -623,19 +651,36 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
                 )
             elif telemetry_data.HasField("environment_metrics"):
                 metrics = telemetry_data.environment_metrics
-                temp = (
+                # Format temperature and humidity strings.  Use consistent formatting
+                # even when values are missing to allow reliable deduplication below.
+                temp_val = (
                     f"{metrics.temperature:.1f}°C"
                     if metrics.HasField("temperature")
                     else "N/A"
                 )
-                humidity = (
+                humidity_val = (
                     f"{metrics.relative_humidity:.1f}%"
                     if metrics.HasField("relative_humidity")
                     else "N/A"
                 )
-                log.info(
-                    f"📊 Environment telemetry from {from_node_display}{via_mqtt_str}: Temp {temp}, Humidity {humidity}"
-                )
+
+                # Check whether we have previously logged the same environment metrics
+                # for this node. If the value hasn't changed since the last log,
+                # suppress it entirely. This avoids rapid-fire duplicate logs from
+                # sensors that report at a high frequency without value changes.
+                # We use the numeric node ID here because the string representation
+                # (from_node_display) can vary (e.g. with or without a leading '!').
+                last_metrics = _last_env_metrics.get(from_node_id_numeric)
+                current_metrics = (temp_val, humidity_val)
+                if last_metrics != current_metrics:
+                    # Only update the cache and log when the metrics actually change
+                    _last_env_metrics[from_node_id_numeric] = current_metrics
+                    # Use deduplicated logging for environment telemetry to avoid log spam
+                    log_with_deduplication(
+                        f"📊 Environment telemetry from {from_node_display}{via_mqtt_str}: Temp {temp_val}, Humidity {humidity_val}",
+                        f"env_{from_node_id_numeric}",
+                        ttl_seconds=30,
+                    )
             else:
                 log.info(
                     f"📊 Telemetry from {from_node_display}{via_mqtt_str}: Unknown type"
@@ -684,16 +729,25 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
                     if hops_data:
                         # Store normalized hop data in traceroute_hops table
                         insert_traceroute_hops(mesh_packet.id, hops_data)
-                        log.info(
-                            f"🔍 Traceroute from {from_node_display} to {to_node_display}{via_mqtt_str}: {len(hops_data)} hops extracted"
+                        # Deduplicate hop extraction logs to avoid spam when multiple
+                        # hops are extracted in rapid succession for the same src/dst.
+                        log_with_deduplication(
+                            f"🔍 Traceroute from {from_node_display} to {to_node_display}{via_mqtt_str}: {len(hops_data)} hops extracted",
+                            f"traceroute_extracted_{from_node_id_numeric}_{to_node_id_numeric}",
+                            ttl_seconds=10,
                         )
                     else:
-                        log.info(
-                            f"🔍 Traceroute from {from_node_display} to {to_node_display}{via_mqtt_str}: no hops extracted"
+                        log_with_deduplication(
+                            f"🔍 Traceroute from {from_node_display} to {to_node_display}{via_mqtt_str}: no hops extracted",
+                            f"traceroute_nohop_{from_node_id_numeric}_{to_node_id_numeric}",
+                            ttl_seconds=10,
                         )
                 else:
-                    log.info(
-                        f"🔍 Traceroute from {from_node_display} to {to_node_display}{via_mqtt_str}: skipped processing"
+                    # Deduplicate skipped processing logs
+                    log_with_deduplication(
+                        f"🔍 Traceroute from {from_node_display} to {to_node_display}{via_mqtt_str}: skipped processing",
+                        f"traceroute_skip_{from_node_id_numeric}_{to_node_id_numeric}",
+                        ttl_seconds=10,
                     )
 
                 processed_successfully = True
@@ -776,16 +830,33 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
                             f"🔍 Encrypted traceroute packet from {from_node_display}{via_mqtt_str} (decryption failed)"
                         )
                     else:
-                        log.info(
-                            f"🔒 Encrypted packet {port_name} from {from_node_display}{via_mqtt_str} (decryption failed)"
+                        # Deduplicate logs for unknown encrypted packets to avoid spamming
+                        log_with_deduplication(
+                            f"🔒 Encrypted packet {port_name} from {from_node_display}{via_mqtt_str} (decryption failed)",
+                            f"enc_{from_node_id_numeric}_{port_name}",
+                            ttl_seconds=30,
                         )
                 else:
-                    log.info(
-                        f"📦 Unknown packet type {port_name} from {from_node_display}{via_mqtt_str}"
+                    # Deduplicate logs for unknown packet types (unencrypted). Many packets may
+                    # repeatedly produce identical messages (e.g., NEIGHBORINFO_APP or STORE_FORWARD_APP),
+                    # so suppress duplicates for a reasonable window.
+                    log_with_deduplication(
+                        f"📦 Unknown packet type {port_name} from {from_node_display}{via_mqtt_str}",
+                        f"unknown_{from_node_id_numeric}_{port_name}",
+                        ttl_seconds=30,
                     )
             else:
-                log.info(
-                    f"📦 Packet type {port_name} from {from_node_display}{via_mqtt_str}: {len(mesh_packet.decoded.payload) if hasattr(mesh_packet.decoded, 'payload') else 0} bytes"
+                # Deduplicate logs for recognized but unhandled packet types. Without this,
+                # applications like NEIGHBORINFO_APP or STORE_FORWARD_APP can spam the logs.
+                payload_len = (
+                    len(mesh_packet.decoded.payload)
+                    if hasattr(mesh_packet.decoded, "payload")
+                    else 0
+                )
+                log_with_deduplication(
+                    f"📦 Packet type {port_name} from {from_node_display}{via_mqtt_str}: {payload_len} bytes",
+                    f"port_{from_node_id_numeric}_{port_name}",
+                    ttl_seconds=30,
                 )
             processed_successfully = True
 

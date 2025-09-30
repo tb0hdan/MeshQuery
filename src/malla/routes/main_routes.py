@@ -76,3 +76,14 @@ def longest_links():
     except Exception as e:
         logger.error(f"Error in longest links route: {e}")
         return f"Longest links error: {e}", 500
+
+
+# Packet heatmap view.  Displays a heatmap of packet activity per node.
+@main_bp.route("/packet-heatmap")
+def packet_heatmap():
+    """Render the packet heatmap page."""
+    try:
+        return render_template("packet_heatmap.html")
+    except Exception as e:
+        logger.error(f"Error in packet heatmap route: {e}")
+        return f"Packet heatmap error: {e}", 500

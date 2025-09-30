@@ -1,0 +1,33 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Packet Heatmap (Dark)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <link rel="stylesheet" href="/static/css/dark.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
+</head>
+<body>
+  <header>
+    <div class="title">Packet Heatmap</div>
+    <div class="controls">
+      <span class="badge">Size = activity (auto)</span>
+      <label class="toggle"><input id="toggleTypeColors" type="checkbox"/> Color by packet type</label>
+      <label class="toggle"><input id="toggleRFOnly" type="checkbox" checked/> RF only</label>
+      <label class="toggle"><input id="toggleNodes" type="checkbox" checked/> Show node rings</label>
+      <label class="toggle"><input id="toggleLive" type="checkbox" checked/> Live</label>
+    </div>
+  </header>
+  <div id="map"></div>
+  <div class="legend" id="legend">
+    <div class="row"><span>SNR &lt; -20</span><div class="swatch" style="background:#ff4d4d"></div></div>
+    <div class="row"><span>-20 to -10</span><div class="swatch" style="background:#ffb84d"></div></div>
+    <div class="row"><span>-10 to 0</span><div class="swatch" style="background:#e6ff4d"></div></div>
+    <div class="row"><span>0 to 10</span><div class="swatch" style="background:#7ad76c"></div></div>
+    <div class="row"><span>≥ 10</span><div class="swatch" style="background:#4ddac5"></div></div>
+  </div>
+  <script type="module" src="/static/js/heatmap.js"></script>
+</body>
+</html>

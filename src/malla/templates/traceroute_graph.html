@@ -38,9 +38,7 @@
         {% set graph_controls = [
             {"class": "btn-outline-secondary", "onclick": "centerGraph()", "icon": "bi bi-arrows-move", "text": "Center Graph"},
             {"class": "btn-outline-secondary", "onclick": "resetZoom()", "icon": "bi bi-zoom-out", "text": "Reset Zoom"},
-            {"class": "btn-outline-primary", "onclick": "refreshGraph()", "icon": "bi bi-arrow-clockwise", "text": "Refresh"},
-            {"class": "btn-success", "onclick": "toggleLiveAnimations()", "icon": "bi bi-play-fill", "text": "Start Live", "id": "liveToggleBtn"},
-            {"class": "btn-outline-warning", "onclick": "clearAnimations()", "icon": "bi bi-trash", "text": "Clear Animations"}
+            {"class": "btn-outline-primary", "onclick": "refreshGraph()", "icon": "bi bi-arrow-clockwise", "text": "Refresh"}
         ] %}
         {{ controls_section(graph_controls) }}
 
@@ -272,25 +270,10 @@
 {{ sidebar_styles() }}
 
 <script src="https://d3js.org/d3.v7.min.js"></script>
-<script src="{{ url_for('static', filename='js/live_stream.js') }}"></script>
 <script>
 let currentGraph = null;
 let simulation = null;
 let selectedNode = null;
-
-// Live animation variables
-let isLiveMode = false;
-let animationSpeed = 1.0;
-let packetSize = 8;
-let trailLength = 50;
-let activeAnimations = [];
-let packetCounter = 0;
-let startTime = null;
-let liveStats = {
-    activeNodes: new Set(),
-    packetsPerSecond: 0,
-    totalPackets: 0
-};
 let selectedLink = null;
 let searchResults = [];
 
@@ -726,6 +709,7 @@ function renderGraph(data) {
             .data(data.nodes)
             .join('g')
             .attr('class', 'node')
+            .attr('data-node-id', d => d.id)
             .style('cursor', 'pointer')
             .call(d3.drag()
                 .on('start', dragstarted)
@@ -1394,10 +1378,22 @@ function handleLivePacket(event) {
     console.log('Source node found:', sourceNode);
     console.log('Dest node found:', destNode);
 
-    if (sourceNode && destNode) {
+    // Handle packets from nodes not in current graph by creating temporary nodes
+    if (!sourceNode && packet.from_node_id) {
+        console.log('Creating temporary source node for live packet');
+        const tempSourceNode = {
+            id: packet.from_node_id,
+            name: `!${packet.from_node_id.toString(16).padStart(8, '0')}`,
+            x: Math.random() * 800 + 100,
+            y: Math.random() * 600 + 100,
+            isTemporary: true
+        };
+        currentGraph.nodes.push(tempSourceNode);
+        createBroadcastAnimation(tempSourceNode, packet);
+    } else if (sourceNode && destNode) {
         console.log('Creating packet animation');
         createPacketAnimation(sourceNode, destNode, packet);
-    } else if (sourceNode && packet.broadcast) {
+    } else if (sourceNode && (packet.broadcast || !destNode)) {
         console.log('Creating broadcast animation');
         createBroadcastAnimation(sourceNode, packet);
     } else {

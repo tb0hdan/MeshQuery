@@ -91,7 +91,12 @@ class NetworkGraph {
             return;
         }
 
-        // Resolve link source and destination references to actual node objects
+        // Resolve link source and destination references to actual node objects.  D3
+        // expects each link to define a `source` and a `target` property.  Prior
+        // versions of this code incorrectly attached a `destination` property
+        // instead of `target`, which prevented the force simulation from
+        // updating link positions.  Here we attach both for backward
+        // compatibility but ensure `target` is set.
         const validLinks = [];
         const invalidLinks = [];
 
@@ -103,7 +108,8 @@ class NetworkGraph {
                 validLinks.push({
                     ...link,
                     source: sourceNode,
-                    destination: destNode
+                    destination: destNode,
+                    target: destNode
                 });
             } else {
                 invalidLinks.push({
@@ -159,7 +165,11 @@ class NetworkGraph {
             .enter()
             .append('g')
             .attr('class', 'node')
-            .attr('transform', d => `translate(${d.x || 0}, ${d.y || 0})`);
+            .attr('transform', d => `translate(${d.x || 0}, ${d.y || 0})`)
+            // Attach a data attribute with the node ID.  This allows other scripts
+            // (e.g. live packet animations) to locate the corresponding SVG element
+            // using a simple CSS selector like `[data-node-id="<id>"]`.
+            .attr('data-node-id', d => d.id);
 
         // Add node circles
         this.nodeElements
@@ -226,12 +236,15 @@ class NetworkGraph {
     }
 
     updatePositions() {
+        // Update link end points.  Use `d.target` rather than `d.destination`
+        // because d3.forceLink attaches the `target` property to each link.
         this.linkElements
             .attr('x1', d => d.source.x)
             .attr('y1', d => d.source.y)
-            .attr('x2', d => d.destination.x)
-            .attr('y2', d => d.destination.y);
+            .attr('x2', d => (d.target ? d.target.x : (d.destination ? d.destination.x : d.source.x)))
+            .attr('y2', d => (d.target ? d.target.y : (d.destination ? d.destination.y : d.source.y)));
 
+        // Update node positions
         this.nodeElements
             .attr('transform', d => `translate(${d.x}, ${d.y})`);
     }
@@ -244,9 +257,14 @@ class NetworkGraph {
     }
 
     getNodeLabel(node) {
-        // Return short node ID or name
+        // Return a label for the node.  Prefer explicitly provided short/long
+        // names, then fall back to the generic `name` property if supplied by
+        // the API, and finally to the hexadecimal ID.  Without this check
+        // network graph nodes would always display as !<hex_id> because the
+        // backend currently returns only a `name` field.
         if (node.short_name) return node.short_name;
         if (node.long_name) return node.long_name;
+        if (node.name) return node.name;
         return `!${node.id.toString(16).padStart(8, '0')}`;
     }
 
@@ -316,9 +334,15 @@ class NetworkGraph {
     }
 
     removeLink(sourceId, destId) {
-        this.links = this.links.filter(link =>
-            !(link.source.id === sourceId && link.destination.id === destId)
-        );
+        // Remove the link matching the provided source/destination identifiers.
+        this.links = this.links.filter(link => {
+            const srcMatches = link.source && link.source.id === sourceId;
+            // Consider both `target` and `destination` properties to remain
+            // backward compatible.
+            const destMatches = (link.target && link.target.id === destId) ||
+                                (link.destination && link.destination.id === destId);
+            return !(srcMatches && destMatches);
+        });
         this.render();
         this.startSimulation();
     }
@@ -352,15 +376,21 @@ class NetworkGraph {
     }
 
     pulseNode(nodeId) {
+        // Apply a pulsing animation to the circle element within the node group.
         const nodeElement = this.getNodeElement(nodeId);
         if (nodeElement) {
-            d3.select(nodeElement)
-                .transition()
-                .duration(500)
-                .attr('r', this.options.nodeRadius * 1.5)
-                .transition()
-                .duration(500)
-                .attr('r', this.options.nodeRadius);
+            // Select the circle inside the group.  Animating the group itself
+            // won't work because <g> elements do not have an `r` attribute.
+            const circle = d3.select(nodeElement).select('circle');
+            if (!circle.empty()) {
+                circle
+                    .transition()
+                    .duration(500)
+                    .attr('r', this.options.nodeRadius * 1.5)
+                    .transition()
+                    .duration(500)
+                    .attr('r', this.options.nodeRadius);
+            }
         }
     }
 }

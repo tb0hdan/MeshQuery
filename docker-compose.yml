@@ -76,7 +76,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 12
-    command: ["gunicorn","-w","2","-k","gthread","-b","0.0.0.0:8080","malla.wsgi:get_application()"]
+    command: ["gunicorn","-w","2","-k","gevent","-b","0.0.0.0:8080","malla.wsgi:get_application()"]
     restart: unless-stopped
 
 volumes:

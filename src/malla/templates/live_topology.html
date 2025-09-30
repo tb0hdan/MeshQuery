@@ -325,8 +325,8 @@ async function loadNetworkData() {
     try {
         showLoading();
 
-        // Load network topology data using the same endpoint as the regular Network Graph
-        const response = await fetch('/api/traceroute/graph?hours=24&min_snr=-30&include_indirect=true');
+        // Load network topology data using the network graph endpoint
+        const response = await fetch('/api/network-graph');
 
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -404,12 +404,12 @@ async function pollForPackets() {
     if (!isLiveMode) return;
 
     try {
-        // Get recent packets (last 5 seconds) using the packets API
-        const response = await fetch('/api/packets/data?limit=50&recent=5');
-        const data = await response.json();
+        // Get recent packets (last 5 seconds) using the packets recent API
+        const response = await fetch('/api/packets/recent?minutes=1&limit=50');
+        const packetsList = await response.json();
 
-        if (data.packets) {
-            processNewPackets(data.packets);
+        if (packetsList && packetsList.length > 0) {
+            processNewPackets(packetsList);
         }
 
     } catch (error) {
@@ -422,17 +422,21 @@ async function pollForPackets() {
 
 function processNewPackets(packets) {
     packets.forEach(packet => {
+        // Handle both old and new packet formats
+        const fromNodeId = packet.from_node_id || packet.src || packet.srcId;
+        const toNodeId = packet.to_node_id || packet.dst || packet.dstId;
+
         // Check if both source and destination nodes exist in the graph
-        const sourceNode = networkGraph.getNode(packet.from_node_id);
-        const destNode = networkGraph.getNode(packet.to_node_id);
+        const sourceNode = networkGraph.getNode(fromNodeId);
+        const destNode = networkGraph.getNode(toNodeId);
 
         if (sourceNode && destNode) {
             // Create packet animation
             createPacketAnimation(sourceNode, destNode, packet);
 
             // Update stats
-            liveStats.activeNodes.add(packet.from_node_id);
-            liveStats.activeNodes.add(packet.to_node_id);
+            liveStats.activeNodes.add(fromNodeId);
+            liveStats.activeNodes.add(toNodeId);
             liveStats.totalPackets++;
             packetCounter++;
 
@@ -441,11 +445,11 @@ function processNewPackets(packets) {
         }
 
         // Handle broadcast packets
-        if (packet.to_node_id === 0 || packet.to_node_id === 0xFFFFFFFF) {
-            const sourceNode = networkGraph.getNode(packet.from_node_id);
+        if (toNodeId === 0 || toNodeId === 0xFFFFFFFF) {
+            const sourceNode = networkGraph.getNode(fromNodeId);
             if (sourceNode) {
                 createBroadcastAnimation(sourceNode, packet);
-                liveStats.activeNodes.add(packet.from_node_id);
+                liveStats.activeNodes.add(fromNodeId);
                 liveStats.totalPackets++;
                 packetCounter++;
             }
@@ -454,40 +458,51 @@ function processNewPackets(packets) {
 }
 
 function createPacketAnimation(sourceNode, destNode, packet) {
-    const animation = {
-        id: Date.now() + Math.random(),
-        source: sourceNode,
-        destination: destNode,
-        packet: packet,
-        element: null,
-        startTime: Date.now()
-    };
+    // Use the NetworkGraph's built-in animation method
+    if (networkGraph && typeof networkGraph.createPacketAnimation === 'function') {
+        networkGraph.createPacketAnimation(sourceNode.id, destNode.id, packet);
+    } else {
+        // Fallback to manual animation if NetworkGraph method not available
+        const animation = {
+            id: Date.now() + Math.random(),
+            source: sourceNode,
+            destination: destNode,
+            packet: packet,
+            element: null,
+            startTime: Date.now()
+        };
 
-    // Create packet element
-    const packetEl = document.createElement('div');
-    packetEl.className = 'packet-animation';
-    packetEl.style.width = packetSize + 'px';
-    packetEl.style.height = packetSize + 'px';
-    packetEl.style.left = sourceNode.x + 'px';
-    packetEl.style.top = sourceNode.y + 'px';
+        // Create packet element
+        const packetEl = document.createElement('div');
+        packetEl.className = 'packet-animation';
+        packetEl.style.width = packetSize + 'px';
+        packetEl.style.height = packetSize + 'px';
+        packetEl.style.left = sourceNode.x + 'px';
+        packetEl.style.top = sourceNode.y + 'px';
 
-    document.getElementById('networkGraph').appendChild(packetEl);
-    animation.element = packetEl;
+        document.getElementById('networkGraph').appendChild(packetEl);
+        animation.element = packetEl;
 
-    // Animate packet movement
-    animatePacket(animation);
+        // Animate packet movement
+        animatePacket(animation);
 
-    activeAnimations.push(animation);
+        activeAnimations.push(animation);
+    }
 }
 
 function createBroadcastAnimation(sourceNode, packet) {
-    // Pulse the source node for broadcast
-    const nodeElement = networkGraph.getNodeElement(sourceNode.id);
-    if (nodeElement) {
-        nodeElement.classList.add('node-pulse');
-        setTimeout(() => {
-            nodeElement.classList.remove('node-pulse');
-        }, 500);
+    // Use NetworkGraph's pulseNode method for broadcast
+    if (networkGraph && typeof networkGraph.pulseNode === 'function') {
+        networkGraph.pulseNode(sourceNode.id);
+    } else {
+        // Fallback to manual pulse
+        const nodeElement = networkGraph.getNodeElement(sourceNode.id);
+        if (nodeElement) {
+            nodeElement.classList.add('node-pulse');
+            setTimeout(() => {
+                nodeElement.classList.remove('node-pulse');
+            }, 500);
+        }
     }
 
     // Add to recent activity
@@ -620,6 +635,24 @@ function showError(message) {
 window.addEventListener('beforeunload', function() {
     stopLiveMode();
     clearAllAnimations();
+    // Clean up event listeners
+    if (networkGraph) {
+        networkGraph.cleanup();
+    }
 });
+
+// Add cleanup method to NetworkGraph class
+if (typeof NetworkGraph !== 'undefined') {
+    NetworkGraph.prototype.cleanup = function() {
+        // Stop any running animations
+        if (this.simulation) {
+            this.simulation.stop();
+        }
+        // Clear any timers or intervals
+        if (this._gcTimer) {
+            clearInterval(this._gcTimer);
+        }
+    };
+}
 </script>
 {% endblock %}

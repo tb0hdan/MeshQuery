@@ -115,6 +115,9 @@ class LocationService:
 
         # Process network links to build neighbor relationships
         for link in network_data.get("links", []):
+            if "source" not in link or "target" not in link:
+                logger.warning(f"Link missing source/target fields: {link}")
+                continue
             source_id = link["source"]
             target_id = link["target"]
 
@@ -351,20 +354,33 @@ class LocationService:
                 hours=hours,
             )
 
-            # Convert Tier B format to network graph format
+            # Convert Tier B format to network graph format with distance filtering
             network_data = {"links": [], "nodes": {}}
+            max_distance_km = 250  # Filter out links longer than 250km
 
+            logger.info(f"Processing {len(tier_b_links)} tier_b_links")
             for link in tier_b_links:
+                logger.debug(f"Link structure: {list(link.keys())}")
+
+                # Check distance and filter out long-distance links (likely MQTT/internet)
+                distance_km = link.get("distance_km")
+                if distance_km is not None and distance_km > max_distance_km:
+                    logger.debug(
+                        f"Filtering out link from {link['from_node_id']} to {link['to_node_id']} - distance {distance_km}km > {max_distance_km}km"
+                    )
+                    continue
+
                 network_data["links"].append(
                     {
-                        "source": link["source_id"],
-                        "target": link["dest_id"],
+                        "source": link["from_node_id"],
+                        "target": link["to_node_id"],
                         "last_seen": link["last_seen"].timestamp()
                         if hasattr(link["last_seen"], "timestamp")
                         else link["last_seen"],
                         "packet_count": link["traceroute_count"],
                         "avg_snr": link["snr"],
                         "last_packet_id": None,  # Not available in Tier B format
+                        "distance_km": distance_km,
                     }
                 )
 
@@ -394,6 +410,7 @@ class LocationService:
                     "is_bidirectional": True,  # Network graph links are bidirectional by design
                     "total_hops_seen": link["packet_count"],
                     "last_packet_id": link.get("last_packet_id"),
+                    "distance_km": link.get("distance_km"),
                 }
 
                 traceroute_links.append(traceroute_link)
@@ -1024,8 +1041,69 @@ class LocationService:
                 else:
                     link_map[key] = link_payload
 
-            logger.info("Generated %d packet-based RF links", len(link_map))
-            return list(link_map.values())
+            # Apply distance filtering to packet links (same as traceroute links)
+            max_distance_km = 250  # Filter out links longer than 250km
+            filtered_links = []
+
+            # Get node locations for distance calculation
+            try:
+                from ..database.repositories import LocationRepository
+
+                # Get all unique node IDs from links
+                all_node_ids = set()
+                for key in link_map.keys():
+                    all_node_ids.add(key[0])
+                    all_node_ids.add(key[1])
+
+                # Get locations for these nodes
+                locations = LocationRepository.get_node_locations(
+                    {"node_ids": list(all_node_ids)}
+                )
+                location_map = {loc["node_id"]: loc for loc in locations}
+
+                # Calculate distances and filter
+                for link in link_map.values():
+                    from_node_id = link["from_node_id"]
+                    to_node_id = link["to_node_id"]
+
+                    # Check if we have positions for both nodes
+                    if from_node_id in location_map and to_node_id in location_map:
+                        from_loc = location_map[from_node_id]
+                        to_loc = location_map[to_node_id]
+
+                        # Calculate distance
+                        distance_km = LocationService.calculate_haversine_distance(
+                            from_loc["latitude"],
+                            from_loc["longitude"],
+                            to_loc["latitude"],
+                            to_loc["longitude"],
+                        )
+
+                        # Only include links under 250km
+                        if distance_km <= max_distance_km:
+                            link["distance_km"] = round(distance_km, 2)
+                            filtered_links.append(link)
+                        else:
+                            logger.debug(
+                                f"Filtering out packet link from {from_node_id} to {to_node_id} - distance {distance_km:.2f}km > {max_distance_km}km"
+                            )
+                    else:
+                        # If no position data, include the link (fallback for nodes without GPS)
+                        link["distance_km"] = None
+                        filtered_links.append(link)
+
+                logger.info(
+                    "Generated %d packet-based RF links (filtered from %d by distance)",
+                    len(filtered_links),
+                    len(link_map),
+                )
+                return filtered_links
+
+            except Exception as dist_error:
+                logger.warning(
+                    f"Could not apply distance filtering: {dist_error}, returning all links"
+                )
+                return list(link_map.values())
 
         except Exception as e:
             logger.error("Error getting packet links: %s", e)

@@ -477,43 +477,139 @@ class TracerouteService:
     ) -> dict[str, Any]:
         """Return longest single-hop and multi-hop links ranked by distance (km)."""
         logger.info("Computing longest links analysis (distance-based)")
-        from ..database.schema_tier_b import get_longest_links_optimized
+        try:
+            from ..database.schema_tier_b import get_longest_links_optimized
+            from ..database.repositories import NodeRepository, TracerouteRepository
+            from ..models.traceroute import TraceroutePacket
+            from ..utils.geo_utils import calculate_distance
 
-        data = get_longest_links_optimized(
-            min_distance_km=min_distance_km, min_snr=min_snr, max_results=max_results, hours=168
-        )
+            # Get single-hop links with error handling
+            try:
+                single_hop_links = get_longest_links_optimized(
+                    min_distance_km=min_distance_km, min_snr=min_snr, max_results=max_results, hours=168
+                )
+                logger.info(f"Retrieved {len(single_hop_links)} single-hop links")
+            except Exception as e:
+                logger.error(f"Error getting single-hop links: {e}")
+                single_hop_links = []
 
-        def map_list(items):
-            mapped = []
-            for link in items:
-                mapped.append({
-                    "from_node_id": link["source_id"],
-                    "to_node_id": link["dest_id"],
-                    "from_node_name": f"!{link['source_id']:08x}",
-                    "to_node_name": f"!{link['dest_id']:08x}",
-                    "distance_km": link["distance_km"],
-                    "avg_snr": link["snr"],
-                    "timestamp": link["last_seen"],
-                    "packet_id": None,
-                })
-            return mapped
+            # Get multi-hop links using optimized approach
+            multi_hop_links = []
+            try:
+                # Query the longest_multihop_mv materialized view directly
+                from ..database.connection_postgres import get_postgres_connection, get_postgres_cursor
+                conn = get_postgres_connection()
+                cursor = get_postgres_cursor(conn)
 
-        single = map_list(data.get("single_hop", []))
-        multi = map_list(data.get("multi_hop", []))
+                cursor.execute("""
+                    SELECT
+                        source_id as from_node_id,
+                        dest_id as to_node_id,
+                        max_path_distance_km as total_distance_km,
+                        route_count as hop_count,
+                        NULL as avg_snr,  -- SNR not available in multihop view
+                        last_seen
+                    FROM longest_multihop_mv
+                    WHERE last_seen >= NOW() - MAKE_INTERVAL(hours => %s)
+                    ORDER BY max_path_distance_km DESC
+                    LIMIT %s
+                """, (168, max_results))
 
-        result = {
-            "summary": {
-                "total_links": len(single) + len(multi),
-                "direct_links": len(single),
-                "longest_direct": single[0] if single else None,
-                "longest_path": multi[0] if multi else None,
-            },
-            "single_hop": single,
-            "multi_hop": multi,
-            "direct_links": single,  # For JavaScript compatibility
-            "indirect_links": multi,  # For JavaScript compatibility
-        }
-        return result
+                multi_hop_data = cursor.fetchall()
+                conn.close()
+
+                logger.info(f"Retrieved {len(multi_hop_data)} multi-hop links from materialized view")
+
+                # Convert to the expected format
+                for link in multi_hop_data:
+                    multi_hop_links.append({
+                        "from_node_id": link[0],
+                        "to_node_id": link[1],
+                        "total_distance_km": link[2] or 0,
+                        "hop_count": link[3] or 0,
+                        "avg_snr": link[4] or 0,
+                        "route_preview": [],  # Not available in materialized view
+                        "last_seen": link[5],
+                        "packet_id": 0,  # Not available in materialized view
+                    })
+
+            except Exception as e:
+                logger.error(f"Error getting multi-hop links data: {e}")
+                multi_hop_links = []
+
+            # Sort by distance to find the longest
+            if single_hop_links:
+                single_hop_links.sort(key=lambda x: x.get('distance_km', 0) or 0, reverse=True)
+            if multi_hop_links:
+                multi_hop_links.sort(key=lambda x: x.get('total_distance_km', 0) or 0, reverse=True)
+
+            # Get node names with error handling
+            try:
+                node_ids = set()
+                for link in single_hop_links:
+                    node_ids.add(link["from_node_id"])
+                    node_ids.add(link["to_node_id"])
+                for link in multi_hop_links:
+                    node_ids.add(link["from_node_id"])
+                    node_ids.add(link["to_node_id"])
+
+                node_names = NodeRepository.get_bulk_node_names(list(node_ids))
+                logger.info(f"Retrieved names for {len(node_names)} nodes")
+
+                # Add node names to links
+                for link in single_hop_links:
+                    link["from_node_name"] = node_names.get(link["from_node_id"], f"!{link['from_node_id']:08x}")
+                    link["to_node_name"] = node_names.get(link["to_node_id"], f"!{link['to_node_id']:08x}")
+                for link in multi_hop_links:
+                    link["from_node_name"] = node_names.get(link["from_node_id"], f"!{link['from_node_id']:08x}")
+                    link["to_node_name"] = node_names.get(link["to_node_id"], f"!{link['to_node_id']:08x}")
+            except Exception as e:
+                logger.error(f"Error getting node names: {e}")
+                # Use fallback names
+                for link in single_hop_links:
+                    link["from_node_name"] = f"!{link['from_node_id']:08x}"
+                    link["to_node_name"] = f"!{link['to_node_id']:08x}"
+                for link in multi_hop_links:
+                    link["from_node_name"] = f"!{link['from_node_id']:08x}"
+                    link["to_node_name"] = f"!{link['to_node_id']:08x}"
+
+
+            longest_direct_distance = 'N/A'
+            if single_hop_links and single_hop_links[0].get('distance_km') is not None:
+                longest_direct_distance = f"{single_hop_links[0]['distance_km']:.2f} km"
+
+            longest_path_distance = 'N/A'
+            if multi_hop_links and multi_hop_links[0].get('total_distance_km') is not None:
+                longest_path_distance = f"{multi_hop_links[0]['total_distance_km']:.2f} km"
+
+            result = {
+                "summary": {
+                    "total_links": len(single_hop_links) + len(multi_hop_links),
+                    "direct_links": len(single_hop_links),
+                    "longest_direct": longest_direct_distance,
+                    "longest_path": longest_path_distance,
+                },
+                "direct_links": single_hop_links,
+                "indirect_links": multi_hop_links,
+            }
+
+            logger.info(f"Longest links analysis completed: {len(single_hop_links)} direct, {len(multi_hop_links)} indirect")
+            return result
+
+        except Exception as e:
+            logger.error(f"Error in longest links analysis: {e}")
+            # Return empty result with error information
+            return {
+                "summary": {
+                    "total_links": 0,
+                    "direct_links": 0,
+                    "longest_direct": "N/A",
+                    "longest_path": "N/A",
+                },
+                "direct_links": [],
+                "indirect_links": [],
+                "error": str(e)
+            }
 
     @staticmethod
     def get_network_graph_data(
@@ -521,7 +617,7 @@ class TracerouteService:
         min_snr: float = -20.0,
         include_indirect: bool = True,
         filters: dict[str, Any] | None = None,
-        limit_packets: int = 1000,
+        limit_packets: int = 250,
     ) -> dict[str, Any]:
         """
         Extract RF links from traceroute data to build a network connectivity graph.

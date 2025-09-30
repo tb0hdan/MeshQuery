@@ -35,7 +35,7 @@ def get_postgres_connection() -> psycopg2.extensions.connection:
     }
 
     try:
-        conn = psycopg2.connect(**conn_params)
+        conn = psycopg2.connect(**conn_params, options='-c statement_timeout=7000')
         conn.set_session(autocommit=False)
         return conn
     except Exception as e:
@@ -171,7 +171,10 @@ def create_postgres_schema() -> None:
                 "CREATE INDEX IF NOT EXISTS idx_node_hw_model ON node_info(hw_model)",
                 "CREATE INDEX IF NOT EXISTS idx_node_role ON node_info(role)",
                 # Performance indexes for analytics
-                "CREATE INDEX IF NOT EXISTS idx_packet_analytics_24h ON packet_history(from_node_id, timestamp DESC) WHERE timestamp > (EXTRACT(EPOCH FROM NOW()) - 86400)",
+                # NOTE: The idx_packet_analytics_24h index was removed because PostgreSQL
+                # does not allow non-IMMUTABLE functions (such as NOW()) in index predicates.
+                # Filtering by a rolling time window should be done at query time instead.
+                # "CREATE INDEX IF NOT EXISTS idx_packet_analytics_24h ON packet_history(from_node_id, timestamp DESC) WHERE timestamp > (EXTRACT(EPOCH FROM NOW()) - 86400)",
                 "CREATE INDEX IF NOT EXISTS idx_packet_gateway_analytics ON packet_history(gateway_id, timestamp DESC) WHERE gateway_id IS NOT NULL AND gateway_id != ''",
             ]
 
@@ -254,32 +257,44 @@ def create_postgres_schema() -> None:
         indexes = [
             # Basic packet history indexes
             "CREATE INDEX IF NOT EXISTS idx_packet_timestamp ON packet_history(timestamp)",
+            "CREATE INDEX IF NOT EXISTS idx_packet_timestamp_desc ON packet_history(timestamp DESC)",
             "CREATE INDEX IF NOT EXISTS idx_packet_from_node ON packet_history(from_node_id)",
             "CREATE INDEX IF NOT EXISTS idx_packet_to_node ON packet_history(to_node_id)",
             "CREATE INDEX IF NOT EXISTS idx_packet_portnum ON packet_history(portnum)",
             "CREATE INDEX IF NOT EXISTS idx_packet_gateway ON packet_history(gateway_id)",
             "CREATE INDEX IF NOT EXISTS idx_packet_portnum_name ON packet_history(portnum_name)",
             "CREATE INDEX IF NOT EXISTS idx_mesh_packet_id ON packet_history(mesh_packet_id)",
+            "CREATE INDEX IF NOT EXISTS idx_packet_snr ON packet_history(snr) WHERE snr IS NOT NULL",
+            "CREATE INDEX IF NOT EXISTS idx_packet_rssi ON packet_history(rssi) WHERE rssi IS NOT NULL",
             # Composite indexes for common query patterns
             "CREATE INDEX IF NOT EXISTS idx_packet_timestamp_portnum ON packet_history(timestamp DESC, portnum)",
             "CREATE INDEX IF NOT EXISTS idx_packet_from_timestamp ON packet_history(from_node_id, timestamp DESC)",
+            "CREATE INDEX IF NOT EXISTS idx_packet_to_timestamp ON packet_history(to_node_id, timestamp DESC)",
             "CREATE INDEX IF NOT EXISTS idx_packet_gateway_timestamp ON packet_history(gateway_id, timestamp DESC)",
             "CREATE INDEX IF NOT EXISTS idx_packet_portnum_timestamp ON packet_history(portnum, timestamp DESC)",
+            "CREATE INDEX IF NOT EXISTS idx_packet_compound_lookup ON packet_history(from_node_id, to_node_id, timestamp DESC)",
             # Traceroute-specific indexes for better performance
             "CREATE INDEX IF NOT EXISTS idx_packet_traceroute_timestamp ON packet_history(timestamp DESC) WHERE portnum_name = 'TRACEROUTE_APP'",
             "CREATE INDEX IF NOT EXISTS idx_packet_traceroute_processed ON packet_history(processed_successfully, timestamp DESC) WHERE portnum_name = 'TRACEROUTE_APP'",
             "CREATE INDEX IF NOT EXISTS idx_packet_traceroute_nodes ON packet_history(from_node_id, to_node_id, timestamp DESC) WHERE portnum_name = 'TRACEROUTE_APP'",
+            "CREATE INDEX IF NOT EXISTS idx_packet_traceroute_gateway ON packet_history(gateway_id, timestamp DESC) WHERE portnum_name = 'TRACEROUTE_APP'",
             # Position data indexes
             "CREATE INDEX IF NOT EXISTS idx_packet_position_lookup ON packet_history(portnum, from_node_id, timestamp DESC) WHERE portnum = 3 AND raw_payload IS NOT NULL",
+            "CREATE INDEX IF NOT EXISTS idx_packet_position_recent ON packet_history(from_node_id, timestamp DESC) WHERE portnum = 3",
             # Node info indexes
             "CREATE INDEX IF NOT EXISTS idx_node_hex_id ON node_info(hex_id)",
             "CREATE INDEX IF NOT EXISTS idx_node_primary_channel ON node_info(primary_channel)",
             "CREATE INDEX IF NOT EXISTS idx_node_last_updated ON node_info(last_updated DESC)",
             "CREATE INDEX IF NOT EXISTS idx_node_hw_model ON node_info(hw_model)",
             "CREATE INDEX IF NOT EXISTS idx_node_role ON node_info(role)",
+            "CREATE INDEX IF NOT EXISTS idx_node_first_seen ON node_info(first_seen DESC)",
             # Performance indexes for analytics
             "CREATE INDEX IF NOT EXISTS idx_packet_analytics_24h ON packet_history(from_node_id, timestamp DESC)",
             "CREATE INDEX IF NOT EXISTS idx_packet_gateway_analytics ON packet_history(gateway_id, timestamp DESC) WHERE gateway_id IS NOT NULL AND gateway_id != ''",
+            "CREATE INDEX IF NOT EXISTS idx_packet_signal_quality ON packet_history(snr, rssi, timestamp DESC) WHERE snr IS NOT NULL AND rssi IS NOT NULL",
+            # Time-based partitioning support indexes
+            "CREATE INDEX IF NOT EXISTS idx_packet_recent_7d ON packet_history(timestamp DESC) WHERE timestamp >= EXTRACT(EPOCH FROM NOW()) - 604800",
+            "CREATE INDEX IF NOT EXISTS idx_packet_recent_24h ON packet_history(timestamp DESC) WHERE timestamp >= EXTRACT(EPOCH FROM NOW()) - 86400",
         ]
 
         for index_sql in indexes:

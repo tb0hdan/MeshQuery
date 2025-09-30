@@ -1,0 +1,25 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Network Graph (Live)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <link rel="stylesheet" href="/static/css/dark.css"/>
+  <style>
+    #graph { width: 100%; height: calc(100vh - 70px); background:#0b0e13; }
+    canvas { display:block; width:100%; height:100%; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="title">Network Graph</div>
+    <div class="controls">
+      <button id="btnStart" class="chip">Start live</button>
+      <button id="btnStop" class="chip">Stop</button>
+      <span class="badge" id="stats">0 nodes • 0 edges</span>
+    </div>
+  </header>
+  <div id="graph"></div>
+  <script type="module" src="/static/js/network_graph.js"></script>
+</body>
+</html>

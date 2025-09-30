@@ -34,6 +34,12 @@ class ModernTable {
 
         this.searchTimeout = null;
         this.eventListeners = {}; // Add event listener support
+        // Track whether pagination click handler has been attached to avoid
+        // adding duplicate event listeners on every update.  Without this
+        // guard, updatePagination() would add a new listener each time it
+        // re-renders the pagination controls, leading to multiple page
+        // changes per click.
+        this._paginationListenerAttached = false;
         this.init();
     }
 
@@ -328,10 +334,14 @@ class ModernTable {
         }
 
         if (column.type === 'link') {
-            return `<a href="${column.linkTemplate.replace('{id}', row.id)}" class="text-decoration-none">${value || 'Unknown'}</a>`;
+            // Only treat undefined or null as unknown.  Falsy values such as 0
+            // should still be rendered.
+            const display = (value === undefined || value === null) ? 'Unknown' : value;
+            return `<a href="${column.linkTemplate.replace('{id}', row.id)}" class="text-decoration-none">${display}</a>`;
         }
 
-        return value || '';
+        // Return raw value when present; avoid hiding 0 or false
+        return (value === undefined || value === null) ? '' : value;
     }
 
     getNestedValue(obj, path) {
@@ -403,17 +413,20 @@ class ModernTable {
         const paginationContainer = document.getElementById(`${this.container.id}-pagination`);
         paginationContainer.innerHTML = this.renderPaginationButtons();
 
-        // Add event listeners to pagination buttons
-        paginationContainer.addEventListener('click', (e) => {
-            const button = e.target.closest('.pagination-btn');
-            if (button && !button.disabled) {
-                const page = parseInt(button.dataset.page);
-                if (page && page !== this.state.page) {
-                    this.state.page = page;
-                    this.loadData();
+        // Attach click handler once to handle pagination button clicks.
+        if (!this._paginationListenerAttached) {
+            paginationContainer.addEventListener('click', (e) => {
+                const button = e.target.closest('.pagination-btn');
+                if (button && !button.disabled) {
+                    const page = parseInt(button.dataset.page);
+                    if (page && page !== this.state.page) {
+                        this.state.page = page;
+                        this.loadData();
+                    }
                 }
-            }
-        });
+            });
+            this._paginationListenerAttached = true;
+        }
     }
 
     renderPaginationButtons() {

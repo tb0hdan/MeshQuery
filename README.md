@@ -1,16 +1,23 @@
 # Malla - Docker-Enhanced Meshtastic Network Analyzer
 
-This is a Docker-enhanced continuation of the original [Malla project](https://github.com/zenitraM/malla) - a comprehensive web analyzer for Meshtastic networks based on MQTT data.
+This is a Docker-enhanced continuation of the original [Malla project](https://github.com/n30nex/malla) - a comprehensive web analyzer for Meshtastic networks based on MQTT data.
 
-## ✅ Current Status: Fully Functional
+## ⚠️ Current Status: Critical Issues Identified
 
-**All major issues have been resolved!** The system is now fully functional with:
-- ✅ Live packet animations on Network Graph page
-- ✅ Longest Links analysis working
-- ✅ Traceroute packet payload decoding fixed
-- ✅ Map packet links toggle enabled by default
-- ✅ Madrid placeholder changed to ocean location
-- ✅ All database queries optimized for PostgreSQL
+**The system has several critical issues that need immediate attention:**
+
+### 🚨 Known Issues
+- ❌ **Live Animations**: Network Graph live animations completely broken due to database schema mismatch
+- ❌ **Longest Links Complete Paths**: Not working - only Single RF Hops functional
+- ❌ **Database Schema**: Missing `hop_count` column causing stream route failures
+- ❌ **Stream Route**: Continuous errors every 250ms due to schema mismatch
+- ⚠️ **MQTT Connection**: Frequent disconnections from broker
+
+### 🔧 What's Working
+- ✅ Single RF Hops in Longest Links analysis
+- ✅ Basic web interface loading
+- ✅ MQTT data capture (with connection issues)
+- ✅ PostgreSQL database connection
 
 ## 🚀 Quick Start with Docker
 
@@ -25,8 +32,8 @@ This enhanced version provides a complete Docker-based deployment with PostgreSQ
 
 ```bash
 # Clone the repository
-git clone https://github.com/n30nex/MeshQuery
-cd MeshQuery
+git clone https://github.com/n30nex/malla.git
+cd malla
 
 # Start all services (PostgreSQL, MQTT, Web UI, Data Capture)
 docker-compose up --build

@@ -522,6 +522,19 @@ let linkData = [];
 let firstDisplay = true; // prevent recenter after initial load
 let currentHopDepth = 1; // max hop depth to display around selected node
 
+// Mapping of node_id to its Leaflet marker for quick lookup during live packet
+// animations.  This object will be populated in addNodeMarker() when markers
+// are created.  Using this map avoids scanning all markers to find a node
+// when a live packet arrives.
+let nodeMarkerMap = {};
+
+// Define a maximum realistic RF link distance (in kilometers).  Links
+// exceeding this threshold will be ignored when rendering.  Meshtastic
+// devices are not expected to maintain links over extreme distances such
+// as 1000km; filtering out long links avoids misleading visuals when
+// packets traverse via MQTT or misconfigured nodes.
+const MAX_LINK_DISTANCE_KM = 200;
+
 // Initialize the page
 document.addEventListener('DOMContentLoaded', function() {
     // Wait for jQuery to be available
@@ -529,6 +542,10 @@ document.addEventListener('DOMContentLoaded', function() {
         if (typeof $ !== 'undefined') {
             initializeInterface();
             initMap();
+            // After the map has been initialized, establish a live packet stream.
+            // This stream will trigger node or cluster flashing when packets
+            // are broadcast or received in real time.
+            connectLiveStream();
         } else {
             setTimeout(waitForJQuery, 50);
         }
@@ -891,6 +908,8 @@ function updateMapDisplay() {
     // Clear existing markers
     markerClusterGroup.clearLayers();
     nodeMarkers = [];
+    // Reset the marker lookup since we're rebuilding markers from scratch.
+    nodeMarkerMap = {};
 
     // Add markers for each filtered node
     nodeData.forEach(node => {
@@ -958,6 +977,12 @@ function addNodeMarker(node) {
 
     markerClusterGroup.addLayer(marker);
     nodeMarkers.push(marker);
+
+    // Also store a lookup from node_id to its marker.  This is used by live packet
+    // animations to quickly find the marker corresponding to a packet's source or
+    // destination.  Without this mapping, the animation would have to scan all
+    // markers on each event.  Note: node.node_id is a numeric identifier.
+    nodeMarkerMap[node.node_id] = marker;
 }
 
 // Create popup content for a node
@@ -1831,7 +1856,17 @@ async function refreshMapData() {
         allNodeData = data.locations || [];
         const tracerouteLinksFetched = (data.traceroute_links || []).map(l => ({ ...l, link_type: 'traceroute' }));
         const packetLinksFetched = (data.packet_links || []).map(l => ({ ...l, link_type: 'packet' }));
-        allLinkData = [...tracerouteLinksFetched, ...packetLinksFetched];
+        // Merge traceroute and packet links, then drop links whose distance
+        // exceeds the configured maximum.  This helps avoid impossible
+        // long-range connections (e.g. thousands of km) that can appear
+        // when packets are relayed over MQTT rather than direct RF.
+        const combinedLinks = [...tracerouteLinksFetched, ...packetLinksFetched];
+        allLinkData = combinedLinks.filter(l => {
+            // If no distance is known, keep the link (to avoid hiding valid
+            // connections where GPS data is missing).  Otherwise enforce the
+            // maximum distance threshold.
+            return l.distance_km === undefined || l.distance_km === null || l.distance_km <= MAX_LINK_DISTANCE_KM;
+        });
 
         // Apply filters and update display
         applyClientSideFilters();
@@ -1842,9 +1877,12 @@ async function refreshMapData() {
         showTracerouteLinks = currentShowTraceroute;
         showPacketLinks = currentShowPacket;
 
-        // Update link visibility
+        // Update link visibility.  When a node is selected the call to
+        // drawHopNetwork() will normally refit the map to include all visible
+        // nodes.  This resets the user's zoom/center on every refresh.  Pass
+        // `true` to skip fitting so the current view remains intact.
         if (selectedNodeId !== null) {
-            drawHopNetwork();
+            drawHopNetwork(true);
         } else {
             if (showTracerouteLinks) {
                 drawTracerouteLinks();
@@ -1861,6 +1899,89 @@ async function refreshMapData() {
 
     } catch (error) {
         console.error('Error refreshing map data:', error);
+    }
+}
+
+// -------------------------------------------------------------------
+// Live Packet Streaming and Node/Cluster Flashing
+// -------------------------------------------------------------------
+
+/**
+ * Highlight a node or its cluster on the map when a live packet event occurs.
+ *
+ * @param {number|string} nodeId - The numeric node ID from the live packet data.
+ * @param {string} color - 'green' for transmitters (broadcast) or 'red' for receivers.
+ */
+function flashNode(nodeId, color) {
+    // Normalize the ID to a number for consistent map lookup keys
+    const idKey = typeof nodeId === 'string' ? parseInt(nodeId, 10) : nodeId;
+    const marker = nodeMarkerMap[idKey];
+    if (!marker) {
+        // No marker is currently displayed for this node (may be filtered out)
+        return;
+    }
+    // Determine the element to highlight: either the marker itself or its cluster
+    let element = null;
+    try {
+        // Retrieve visible parent of the marker; if the marker is clustered,
+        // this will return the cluster icon instead of the marker.  Otherwise
+        // returns the marker itself.
+        const parent = markerClusterGroup.getVisibleParent(marker);
+        if (parent && typeof parent.getChildCount === 'function' && parent.getChildCount() > 1) {
+            // It's a cluster; highlight the cluster icon
+            element = parent._icon;
+        } else {
+            // Use the marker's DOM element
+            element = marker.getElement();
+        }
+    } catch (e) {
+        // Fallback to marker element on any unexpected error
+        element = marker.getElement();
+    }
+    if (!element) return;
+    // Choose highlight color; default to green
+    let highlightColor;
+    if (color === 'red') {
+        highlightColor = 'rgba(220,53,69,0.7)'; // Bootstrap danger red
+    } else {
+        highlightColor = 'rgba(25,135,84,0.7)'; // Bootstrap success green
+    }
+    // Store original box-shadow to restore later
+    const originalBoxShadow = element.style.boxShadow;
+    // Apply highlight box shadow
+    element.style.boxShadow = `0 0 15px 5px ${highlightColor}`;
+    // Remove highlight after a short delay
+    setTimeout(() => {
+        element.style.boxShadow = originalBoxShadow || '';
+    }, 700);
+}
+
+/**
+ * Establish a Server-Sent Events connection to the /stream/packets endpoint.
+ * Each packet will cause the originating node to flash green and the destination
+ * node to flash red on the map.  If a node is currently in a cluster, the
+ * cluster icon will be highlighted instead.
+ */
+function connectLiveStream() {
+    try {
+        const src = new EventSource('/stream/packets');
+        src.addEventListener('ping', () => console.log('[map] live ping'));
+        src.onmessage = (e) => {
+            try {
+                const data = JSON.parse(e.data);
+                // data.from and data.to contain numeric node IDs; flash accordingly
+                if (data.from !== undefined && data.from !== null) {
+                    flashNode(data.from, 'green');
+                }
+                if (data.to !== undefined && data.to !== null) {
+                    flashNode(data.to, 'red');
+                }
+            } catch (err) {
+                console.warn('Error parsing live packet data', err);
+            }
+        };
+    } catch (e) {
+        console.warn('EventSource unsupported or failed to connect', e);
     }
 }
 
