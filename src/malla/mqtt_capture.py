@@ -63,6 +63,25 @@ logging.basicConfig(
 )
 
 
+def connect_with_retry(client: mqtt.Client, max_retries: int = 10) -> bool:
+    """Connect to MQTT with exponential backoff retry logic."""
+    retry_delay = 1
+    for attempt in range(max_retries):
+        try:
+            client.connect(_cfg.mqtt_broker_address, _cfg.mqtt_port, 60)
+            log.info(f"Connected to MQTT broker on attempt {attempt + 1}")
+            return True
+        except Exception as e:
+            log.warning(f"Connection attempt {attempt + 1} failed: {e}")
+            if attempt < max_retries - 1:
+                time.sleep(retry_delay)
+                retry_delay = min(retry_delay * 2, 60)  # Cap at 60 seconds
+            else:
+                log.error("Max connection retries reached")
+                return False
+    return False
+
+
 def log_with_deduplication(message: str, cache_key: str, ttl_seconds: int = 5) -> None:
     """
     Log a message with deduplication to avoid spam from duplicate packets.
@@ -916,12 +935,9 @@ def main():
     client.on_disconnect = on_disconnect
     client.on_message = on_message
 
-    # Connect to MQTT broker
-    try:
-        client.connect(_cfg.mqtt_broker_address, _cfg.mqtt_port, 60)
-        log.info("Connected to MQTT broker")
-    except Exception as e:
-        log.error(f"Failed to connect to MQTT broker: {e}")
+    # Connect to MQTT broker with retry logic
+    if not connect_with_retry(client):
+        log.error("Failed to connect to MQTT broker after all retries")
         return
 
     # Start the MQTT loop

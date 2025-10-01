@@ -63,21 +63,21 @@ def main():
         print("=" * 60)
         print(f"Database: {cfg.database_file}")
         print(f"Web UI: http://{cfg.host}:{cfg.port}")
-        print("Workers: auto-detected")
+        print(f"Workers: {worker_count}")
         print(f"Debug mode: {cfg.debug}")
         print("=" * 60)
         print()
 
-        # Configure Gunicorn
+        # Configure Gunicorn with improved settings
+        import multiprocessing
+        
+        # Calculate optimal worker count (CPU cores * 2 + 1, but cap at 8)
+        worker_count = min(multiprocessing.cpu_count() * 2 + 1, 8)
+        
         gunicorn_config = {
             "bind": f"{cfg.host}:{cfg.port}",
-            # Use a single worker to avoid duplicate initialization and logging across
-            # multiple worker processes.  The autoscaling based on CPU cores is
-            # disabled to reduce duplicate logs and duplicate background refresh
-            # threads.  If you need higher throughput, increase this value with
-            # caution and consider externalizing shared initialization state.
-            "workers": 1,
-            "worker_class": "sync",
+            "workers": worker_count,
+            "worker_class": "gevent",  # Use gevent for better async handling
             "worker_connections": 1000,
             "max_requests": 1000,
             "max_requests_jitter": 50,
@@ -90,6 +90,10 @@ def main():
             "loglevel": "info",
             "capture_output": True,
             "enable_stdio_inheritance": True,
+            # Add graceful timeout for better shutdown
+            "graceful_timeout": 30,
+            # Enable worker recycling to prevent memory leaks
+            "max_worker_memory": 200,  # MB
         }
 
         # Create Gunicorn application
