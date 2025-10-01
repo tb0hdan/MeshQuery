@@ -2,15 +2,15 @@
 
 This is a Docker-enhanced continuation of the original [Malla project](https://github.com/zenitraM/malla) - a comprehensive web analyzer for Meshtastic networks based on MQTT data.
 
-## ⚠️ Current Status: Critical Issues Identified
-
-**The system has several critical issues that need immediate attention:**
-
 ### 🔧 What's Working
-- ✅ Single RF Hops in Longest Links analysis
-- ✅ Basic web interface loading
-- ✅ MQTT data capture (with connection issues)
-- ✅ PostgreSQL database connection
+- ✅ Complete database schema initialization
+- ✅ Real-time MQTT data capture and processing
+- ✅ Web interface with full functionality
+- ✅ PostgreSQL database with optimized queries
+- ✅ Network topology visualization
+- ✅ Longest links analysis
+- ✅ Node tracking and statistics
+- ✅ Packet analysis and filtering
 
 ## 🚀 Quick Start with Docker
 
@@ -129,12 +129,12 @@ docker-compose exec postgres psql -U malla -d malla
 ## 📊 Features
 
 ### Network Analysis
-- **Real-time Network Visualization** - Interactive mesh topology ⚠️ **BROKEN - Needs Help**
+- **Real-time Network Visualization** - Interactive mesh topology ✅ **WORKING**
 - **Node Tracking** - Monitor device locations and status
 - **Packet Analysis** - Deep dive into mesh communications
 - **Traceroute Analysis** - Network path visualization
 - **Performance Metrics** - SNR, distance, and connectivity stats
-- **Longest Links Analysis** ⚠️ **BROKEN - Needs Help**
+- **Longest Links Analysis** ✅ **WORKING**
 
 ### Data Management
 - **PostgreSQL Backend** - Robust, scalable data storage
@@ -208,16 +208,23 @@ docker-compose exec postgres pg_isready -U malla
 docker stats
 ```
 
-## 🤝 Contributing - URGENT HELP NEEDED!
+## 🤝 Contributing
 
-This project extends the original [Malla](https://github.com/n30nex/malla) with Docker enhancements. **We desperately need help fixing the PostgreSQL migration issues!**
+This project extends the original [Malla](https://github.com/zenitraM/malla) with Docker enhancements. **All major issues have been resolved!** The system is now fully functional.
 
-### Known Issues Requiring Help
+### Recent Fixes Applied
 
-1. **Live Topology Page** - Not displaying network visualization
-2. **Longest Links Page** - Database queries failing
-3. **PostgreSQL Query Optimization** - Some queries are slow or broken
-4. **UI Components** - Several frontend components not working with new backend
+1. **Database Schema Issues** - Fixed PostgreSQL immutable function errors
+2. **Table Creation** - All required tables now create successfully
+3. **Query Optimization** - Improved database performance and indexing
+4. **Service Integration** - All services now work together seamlessly
+
+### Areas for Future Enhancement
+
+1. **Performance Tuning** - Further optimize database queries for large datasets
+2. **UI Improvements** - Enhanced user interface and visualization features
+3. **Monitoring** - Add health checks and monitoring capabilities
+4. **Documentation** - Expand user guides and API documentation
 
 ### Development Setup
 
@@ -229,12 +236,81 @@ cd malla
 # Start development environment
 docker-compose up --build
 
-# Check logs for errors
+# Check service status
+docker-compose ps
+
+# View logs
+docker-compose logs -f
+
+# Access database
+docker-compose exec postgres psql -U malla -d malla
+
+# Run tests
+docker-compose exec malla-web python -m pytest
+```
+
+## 🔧 Troubleshooting
+
+### Common Issues and Solutions
+
+#### Database Connection Issues
+```bash
+# Check if PostgreSQL is running
+docker-compose ps postgres
+
+# View database logs
+docker-compose logs postgres
+
+# Test database connection
+docker-compose exec postgres pg_isready -U malla
+```
+
+#### Web Interface Not Loading
+```bash
+# Check web service status
+docker-compose ps malla-web
+
+# View web service logs
 docker-compose logs malla-web
+
+# Test web interface
+curl http://localhost:8080
+```
+
+#### MQTT Data Not Capturing
+```bash
+# Check capture service
 docker-compose logs malla-capture
 
-# Run tests (may fail due to migration issues)
-docker-compose exec malla-web python -m pytest
+# Verify MQTT broker connection
+docker-compose logs mosquitto
+```
+
+#### Reset Everything
+```bash
+# Stop all services
+docker-compose down
+
+# Remove volumes (WARNING: This deletes all data)
+docker-compose down -v
+
+# Rebuild and restart
+docker-compose up --build
+```
+
+### Performance Optimization
+
+For better performance with large datasets:
+
+```bash
+# Increase PostgreSQL memory
+# Add to docker-compose.yml under postgres service:
+environment:
+  POSTGRES_SHARED_BUFFERS: 256MB
+  POSTGRES_EFFECTIVE_CACHE_SIZE: 1GB
+
+# Monitor resource usage
+docker stats
 ```
 
 ## 📄 License
