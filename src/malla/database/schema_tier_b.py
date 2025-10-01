@@ -147,7 +147,6 @@ def create_tier_b_schema() -> None:
                     MAX(timestamp) AS last_seen,
                     MIN(timestamp) AS first_seen
                 FROM traceroute_hops
-                WHERE timestamp >= NOW() - INTERVAL '7 days'
                 GROUP BY from_node_id, to_node_id
             )
             SELECT * FROM agg
@@ -292,7 +291,7 @@ def get_longest_links_optimized(
             ll.first_seen
         FROM longest_links_mv ll
         WHERE ll.avg_snr >= %s
-        AND ll.last_seen >= NOW() - MAKE_INTERVAL(hours => %s)
+        AND ll.last_seen >= EXTRACT(EPOCH FROM NOW()) - (%s * 3600)
         ORDER BY ll.traceroute_count DESC, ll.avg_snr DESC
         LIMIT %s
         """

@@ -292,9 +292,9 @@ def create_postgres_schema() -> None:
             "CREATE INDEX IF NOT EXISTS idx_packet_analytics_24h ON packet_history(from_node_id, timestamp DESC)",
             "CREATE INDEX IF NOT EXISTS idx_packet_gateway_analytics ON packet_history(gateway_id, timestamp DESC) WHERE gateway_id IS NOT NULL AND gateway_id != ''",
             "CREATE INDEX IF NOT EXISTS idx_packet_signal_quality ON packet_history(snr, rssi, timestamp DESC) WHERE snr IS NOT NULL AND rssi IS NOT NULL",
-            # Time-based partitioning support indexes
-            "CREATE INDEX IF NOT EXISTS idx_packet_recent_7d ON packet_history(timestamp DESC) WHERE timestamp >= EXTRACT(EPOCH FROM NOW()) - 604800",
-            "CREATE INDEX IF NOT EXISTS idx_packet_recent_24h ON packet_history(timestamp DESC) WHERE timestamp >= EXTRACT(EPOCH FROM NOW()) - 86400",
+            # Time-based partitioning support indexes (removed NOW() function as it's not immutable)
+            # "CREATE INDEX IF NOT EXISTS idx_packet_recent_7d ON packet_history(timestamp DESC) WHERE timestamp >= EXTRACT(EPOCH FROM NOW()) - 604800",
+            # "CREATE INDEX IF NOT EXISTS idx_packet_recent_24h ON packet_history(timestamp DESC) WHERE timestamp >= EXTRACT(EPOCH FROM NOW()) - 86400",
         ]
 
         for index_sql in indexes:

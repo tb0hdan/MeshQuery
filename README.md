@@ -1,17 +1,10 @@
 # Malla - Docker-Enhanced Meshtastic Network Analyzer
 
-This is a Docker-enhanced continuation of the original [Malla project](https://github.com/n30nex/malla) - a comprehensive web analyzer for Meshtastic networks based on MQTT data.
+This is a Docker-enhanced continuation of the original [Malla project](https://github.com/zenitraM/malla) - a comprehensive web analyzer for Meshtastic networks based on MQTT data.
 
 ## ⚠️ Current Status: Critical Issues Identified
 
 **The system has several critical issues that need immediate attention:**
-
-### 🚨 Known Issues
-- ❌ **Live Animations**: Network Graph live animations completely broken due to database schema mismatch
-- ❌ **Longest Links Complete Paths**: Not working - only Single RF Hops functional
-- ❌ **Database Schema**: Missing `hop_count` column causing stream route failures
-- ❌ **Stream Route**: Continuous errors every 250ms due to schema mismatch
-- ⚠️ **MQTT Connection**: Frequent disconnections from broker
 
 ### 🔧 What's Working
 - ✅ Single RF Hops in Longest Links analysis
@@ -78,7 +71,7 @@ Key configuration options in `.env`:
 
 ```bash
 # MQTT Configuration (Required)
-MALLA_MQTT_BROker_ADDRESS=mqtt.meshtastic.org
+MALLA_MQTT_BROker_ADDRESS=mqtt.mt.gt
 MALLA_MQTT_USERNAME=meshdev
 MALLA_MQTT_PASSWORD=large4cats
 
@@ -244,13 +237,6 @@ docker-compose logs malla-capture
 docker-compose exec malla-web python -m pytest
 ```
 
-### How to Help
-
-1. **Database Issues**: Check PostgreSQL queries in `src/malla/database/`
-2. **Frontend Issues**: Look at `src/malla/templates/` and `src/malla/static/`
-3. **API Issues**: Review `src/malla/routes/` for broken endpoints
-4. **Logs**: Check container logs for specific error messages
-
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
@@ -261,26 +247,11 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Meshtastic Community** - For the amazing mesh networking platform
 - **Contributors** - All those who have helped improve this project
 
-## 📞 Support
 
 - **Issues** - Report bugs and request features
 - **Discussions** - Community support and questions
 - **Documentation** - Check the original [Malla documentation](https://github.com/zenitraM/malla#readme)
 
-## 🔗 Related Projects
-
-- [Meshtastic](https://meshtastic.org/) - The mesh networking platform
-- [Original Malla](https://github.com/zenitraM/malla) - The base project
-- [Meshtastic MQTT](https://meshtastic.org/docs/software/mqtt) - MQTT integration guide
 
 ---
 
-**⚠️ WARNING: This system has PostgreSQL migration issues!**
-
-While the system captures data successfully, several key features are broken. We need help fixing:
-- Live Topology visualization
-- Longest Links analysis
-- Database query optimization
-- UI component issues
-
-**Ready to help fix the issues?** Start with `docker-compose up --build` and check the logs for errors!
