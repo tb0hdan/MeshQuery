@@ -49,6 +49,7 @@ dependencies = [
     "marshmallow>=3.20.0",
     "mypy==1.18.2",
     "pylint==3.3.8",
+    "types-Markdown==3.9.0.20250906",
 ]
 
 [project.urls]
