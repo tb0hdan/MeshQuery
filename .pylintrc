@@ -1,0 +1,9 @@
+[MASTER]
+ignore-patterns=(.)*_test\.py,test_(.)*\.py,conftest.py
+jobs=0
+
+[FORMAT]
+max-line-length=120
+
+[MESSAGES CONTROL]
+disable=import-error,wrong-import-order,too-many-lines,too-few-public-methods
