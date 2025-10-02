@@ -266,7 +266,6 @@ local-*.py
 .vscode/
 .cursor/
 .screenshots/
-.github/
 .pre-commit-config.yaml
 
 # Docker and container files
