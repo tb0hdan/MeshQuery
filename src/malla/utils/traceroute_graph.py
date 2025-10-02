@@ -1,6 +1,6 @@
 import logging
 from collections import defaultdict
-from typing import Any
+from typing import Any, Optional, Union
 
 from ..models.traceroute import TraceroutePacket
 from .node_utils import get_bulk_node_names
@@ -8,7 +8,7 @@ from .node_utils import get_bulk_node_names
 logger = logging.getLogger(__name__)
 
 
-def _gateway_id_to_int(gateway_id):
+def _gateway_id_to_int(gateway_id: Union[str, int, None]) -> Optional[int]:
     """Convert a gateway_id (which may be a string like '!abcdef12') to an int node id.
     Returns None if it cannot be converted."""
     if gateway_id is None:
@@ -85,7 +85,7 @@ def build_combined_traceroute_graph(packets: list[dict[str, Any]]) -> dict[str, 
             continue
 
         # Create path representation for this packet
-        path_nodes = []
+        path_nodes: list[int] = []
         for hop in rf_hops:
             if not path_nodes or path_nodes[-1] != hop.from_node_id:
                 path_nodes.append(hop.from_node_id)
@@ -212,8 +212,9 @@ def build_combined_traceroute_graph(packets: list[dict[str, Any]]) -> dict[str, 
         path_color = f"hsl({path_color_hue}, 80%, 60%)"
 
         avg_snr = None
-        if path_info["snr_values"]:
-            avg_snr = sum(path_info["snr_values"]) / len(path_info["snr_values"])
+        snr_values = path_info["snr_values"]
+        if snr_values and isinstance(snr_values, list):
+            avg_snr = sum(snr_values) / len(snr_values)
 
         paths.append(
             {
@@ -224,7 +225,7 @@ def build_combined_traceroute_graph(packets: list[dict[str, Any]]) -> dict[str, 
                 "gateway_node_id": path_info["gateway_node_id"],
                 "timestamp": path_info["timestamp"],
                 "avg_snr": avg_snr,
-                "hop_count": len(path_info["nodes"]) - 1 if path_info["nodes"] else 0,
+                "hop_count": len(path_info["nodes"]) - 1 if path_info["nodes"] and isinstance(path_info["nodes"], list) else 0,
             }
         )
 

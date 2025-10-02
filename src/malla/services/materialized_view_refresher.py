@@ -77,7 +77,7 @@ class MaterializedViewRefresher:
                     break  # Stop event was set
 
             except Exception as e:
-                logger.error(f"Error refreshing materialized view: {e}")
+                logger.error("Error refreshing materialized view: %s", e)
                 # Continue running even if one refresh fails
                 time.sleep(60)  # Wait a minute before retrying
 
@@ -89,7 +89,7 @@ class MaterializedViewRefresher:
             refresh_longest_links_mv()
             logger.info("Forced refresh of materialized view completed")
         except Exception as e:
-            logger.error(f"Error in forced refresh: {e}")
+            logger.error("Error in forced refresh: %s", e)
 
     def is_running(self) -> bool:
         """Check if the refresher is currently running."""
@@ -138,7 +138,7 @@ def force_refresh_materialized_view() -> None:
             refresh_longest_links_mv()
             logger.info("One-time refresh of materialized view completed")
         except Exception as e:
-            logger.error(f"Error in one-time refresh: {e}")
+            logger.error("Error in one-time refresh: %s", e)
 
 
 def is_refresher_running() -> bool:

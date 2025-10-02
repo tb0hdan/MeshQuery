@@ -119,7 +119,7 @@ def extract_traceroute_hops(packet_data: dict[str, Any]) -> list[dict[str, Any]]
                 }
                 hops.append(hop)
 
-        logger.debug(f"Extracted {len(hops)} hops from traceroute packet {packet_id}")
+        logger.debug("Extracted %s hops from traceroute packet %s", len(hops), packet_id)
         return hops
 
     except Exception as e:

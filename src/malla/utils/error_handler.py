@@ -6,7 +6,7 @@ import logging
 import time
 from collections.abc import Callable
 from functools import wraps
-from typing import Any
+from typing import Any, Optional, Dict
 
 from flask import jsonify, request
 
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 class APIError(Exception):
     """Custom API error class."""
 
-    def __init__(self, message: str, status_code: int = 500, error_code: str = None):
+    def __init__(self, message: str, status_code: int = 500, error_code: Optional[str] = None):
         self.message = message
         self.status_code = status_code
         self.error_code = error_code
@@ -27,11 +27,11 @@ def handle_api_errors(f: Callable) -> Callable:
     """Decorator to handle API errors consistently."""
 
     @wraps(f)
-    def decorated_function(*args, **kwargs) -> Any:
+    def decorated_function(*args: Any, **kwargs: Any) -> Any:
         try:
             return f(*args, **kwargs)
         except APIError as e:
-            logger.warning(f"API error in {f.__name__}: {e.message}")
+            logger.warning("API error in %s: %s", f.__name__, e.message)
             return jsonify(
                 {
                     "error": e.message,
@@ -40,7 +40,7 @@ def handle_api_errors(f: Callable) -> Callable:
                 }
             ), e.status_code
         except Exception as e:
-            logger.error(f"Unexpected error in {f.__name__}: {e}", exc_info=True)
+            logger.error("Unexpected error in %s: %s", f.__name__, e, exc_info=True)
             return jsonify(
                 {
                     "error": "Internal server error",
@@ -52,12 +52,12 @@ def handle_api_errors(f: Callable) -> Callable:
     return decorated_function
 
 
-def validate_request_data(schema_class):
+def validate_request_data(schema_class: Any) -> Callable:
     """Decorator to validate request data using Marshmallow schemas."""
 
     def decorator(f: Callable) -> Callable:
         @wraps(f)
-        def decorated_function(*args, **kwargs):
+        def decorated_function(*args: Any, **kwargs: Any) -> Any:
             try:
                 # Get request data
                 if request.is_json:
@@ -75,7 +75,7 @@ def validate_request_data(schema_class):
                 return f(*args, **kwargs)
 
             except Exception as e:
-                logger.warning(f"Validation error in {f.__name__}: {e}")
+                logger.warning("Validation error in %s: %s", f.__name__, e)
                 return jsonify(
                     {
                         "error": "Invalid request data",
@@ -93,7 +93,7 @@ def log_api_request(f: Callable) -> Callable:
     """Decorator to log API requests."""
 
     @wraps(f)
-    def decorated_function(*args, **kwargs):
+    def decorated_function(*args: Any, **kwargs: Any) -> Any:
         logger.info(
             f"API request: {request.method} {request.path} from {request.remote_addr}"
         )
@@ -102,16 +102,16 @@ def log_api_request(f: Callable) -> Callable:
     return decorated_function
 
 
-def rate_limit(max_requests: int = 100, window_seconds: int = 3600):
+def rate_limit(max_requests: int = 100, window_seconds: int = 3600) -> Callable:
     """Simple rate limiting decorator."""
 
     # In-memory rate limiting (for production, use Redis)
-    request_counts = {}
+    request_counts: Dict[str, list[int]] = {}
 
     def decorator(f: Callable) -> Callable:
         @wraps(f)
-        def decorated_function(*args, **kwargs):
-            client_ip = request.remote_addr
+        def decorated_function(*args: Any, **kwargs: Any) -> Any:
+            client_ip = request.remote_addr or "unknown"
             current_time = int(time.time())
             window_start = current_time - window_seconds
 
@@ -124,7 +124,7 @@ def rate_limit(max_requests: int = 100, window_seconds: int = 3600):
 
             # Check rate limit
             if len(request_counts[client_ip]) >= max_requests:
-                logger.warning(f"Rate limit exceeded for {client_ip}")
+                logger.warning("Rate limit exceeded for %s", client_ip)
                 return jsonify(
                     {
                         "error": "Rate limit exceeded",

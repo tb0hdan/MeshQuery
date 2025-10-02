@@ -50,7 +50,7 @@ def derive_key_from_channel_name(channel_name: str, key_base64: str) -> bytes:
             # For primary channel, use the key as-is (should already be 32 bytes for AES256)
             return key_bytes
     except Exception as e:
-        logger.warning(f"Error deriving key: {e}")
+        logger.warning("Error deriving key: %s", e)
         return b"\x00" * 32  # Return null key on error
 
 
@@ -80,7 +80,7 @@ def decrypt_packet_payload(
         nonce = packet_id_bytes + sender_id_bytes
 
         if len(nonce) != 16:
-            logger.warning(f"Invalid nonce length: {len(nonce)}, expected 16 bytes")
+            logger.warning("Invalid nonce length: %s, expected 16 bytes", len(nonce))
             return b""
 
         # Create AES-CTR cipher
@@ -98,12 +98,12 @@ def decrypt_packet_payload(
         return decrypted
 
     except Exception as e:
-        logger.warning(f"Decryption failed: {e}")
+        logger.warning("Decryption failed: %s", e)
         return b""
 
 
 def try_decrypt_mesh_packet(
-    mesh_packet, channel_name: str = "", key_base64: str = DEFAULT_CHANNEL_KEY
+    mesh_packet: mesh_pb2.MeshPacket, channel_name: str = "", key_base64: str = DEFAULT_CHANNEL_KEY
 ) -> bool:
     """
     Try to decrypt an encrypted MeshPacket and update it with decoded content.
@@ -172,7 +172,7 @@ def try_decrypt_mesh_packet(
             return False
 
     except Exception as e:
-        logger.warning(f"Error in try_decrypt_mesh_packet: {e}")
+        logger.warning("Error in try_decrypt_mesh_packet: %s", e)
         return False
 
 
@@ -204,7 +204,7 @@ def try_decrypt_database_packet(
         return None
 
     except Exception as e:
-        logger.warning(f"Error in try_decrypt_database_packet: {e}")
+        logger.warning("Error in try_decrypt_database_packet: %s", e)
         return None
 
 

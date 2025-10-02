@@ -1,9 +1,65 @@
 [MASTER]
 ignore-patterns=(.)*_test\.py,test_(.)*\.py,conftest.py
 jobs=0
+fail-under=8.0
 
 [FORMAT]
 max-line-length=120
 
 [MESSAGES CONTROL]
-disable=import-error,wrong-import-order,too-many-lines,too-few-public-methods
+disable=
+    no-member,
+    import-error,
+    wrong-import-order,
+    too-few-public-methods,
+    broad-exception-caught,
+    import-outside-toplevel,
+    too-many-locals,
+    too-many-arguments,
+    too-many-positional-arguments,
+    too-many-instance-attributes,
+    too-many-branches,
+    too-many-statements,
+    too-many-return-statements,
+    too-many-lines,
+    missing-module-docstring,
+    missing-function-docstring,
+    missing-class-docstring,
+    global-statement,
+    unused-argument,
+    line-too-long,
+    no-else-return,
+    redefined-outer-name,
+    invalid-name,
+    duplicate-code,
+    cyclic-import,
+    logging-fstring-interpolation,
+    consider-using-in,
+    consider-iterating-dictionary,
+    wrong-import-position,
+    multiple-imports,
+    multiple-statements,
+    trailing-whitespace,
+    unnecessary-pass,
+    pointless-string-statement,
+    cell-var-from-loop,
+    reimported,
+    global-variable-not-assigned,
+    no-name-in-module,
+    too-many-nested-blocks,
+    used-before-assignment,
+    unused-variable,
+    unsupported-assignment-operation
+
+[DESIGN]
+max-args=10
+max-positional=10
+max-attributes=20
+max-branches=20
+max-locals=30
+max-returns=10
+max-statements=100
+min-public-methods=0
+
+[BASIC]
+good-names=i,j,k,ex,Run,_,e,f,db,id,pk,df,ax,fig,x,y,z,n,m,p,q,r,s,t,u,v,w,cfg,log

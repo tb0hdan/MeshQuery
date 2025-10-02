@@ -9,12 +9,12 @@ live_bp = Blueprint("live", __name__)
 
 
 @live_bp.route("/live")
-def live_page():
+def live_page() -> str:
     """List‑style live packet feed (legacy)."""
     return render_template("live_view.html")
 
 
 @live_bp.route("/live-topography")
-def live_topography_page():
+def live_topography_page() -> str:
     """Serve the topographic live map page."""
     return render_template("live_topography.html")

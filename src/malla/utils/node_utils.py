@@ -35,13 +35,13 @@ def _cache_cleanup_worker() -> None:
                 node_name_cache.clear()
                 if cache_size > 0:
                     try:
-                        logger.debug(f"Cleared node name cache ({cache_size} entries)")
+                        logger.debug("Cleared node name cache (%s entries)", cache_size)
                     except Exception:
                         # Logging system may be shut down during test cleanup
                         pass
         except Exception as e:
             try:
-                logger.error(f"Error in cache cleanup worker: {e}")
+                logger.error("Error in cache cleanup worker: %s", e)
             except Exception:
                 # Logging system may be shut down during test cleanup
                 pass
@@ -153,7 +153,7 @@ def get_node_display_name(node_id: int | str) -> str:
         return display_name
 
     except Exception as e:
-        logger.warning(f"Error getting node name for {node_id}: {e}")
+        logger.warning("Error getting node name for %s: %s", node_id, e)
         # Ensure node_id is an integer before hex formatting
         if isinstance(node_id, int):
             return f"!{node_id:08x}"
@@ -214,7 +214,7 @@ def get_bulk_node_short_names(node_ids: list[int]) -> dict[int, str]:
     if not node_ids:
         return {}
 
-    logger.debug(f"Getting bulk node short names for {len(node_ids)} nodes")
+    logger.debug("Getting bulk node short names for %s nodes", len(node_ids))
 
     try:
         from src.malla.database.adapter import get_db_adapter
@@ -257,11 +257,11 @@ def get_bulk_node_short_names(node_ids: list[int]) -> dict[int, str]:
                 # Fallback to last 4 hex digits (lowercase)
                 result[node_id] = f"{node_id:08x}"[-4:]
 
-        logger.debug(f"Bulk node short names completed: {len(result)} names returned")
+        logger.debug("Bulk node short names completed: %s names returned", len(result))
         return result
 
     except Exception as e:
-        logger.error(f"Error getting bulk node short names: {e}")
+        logger.error("Error getting bulk node short names: %s", e)
         # Return fallback names for all IDs
         result = {}
         for node_id in node_ids:
@@ -282,7 +282,7 @@ def get_bulk_node_names(node_ids: list[int]) -> dict[int, str]:
     if not node_ids:
         return {}
 
-    logger.debug(f"Getting bulk node names for {len(node_ids)} nodes")
+    logger.debug("Getting bulk node names for %s nodes", len(node_ids))
 
     # Check cache first
     result = {}
@@ -343,12 +343,12 @@ def get_bulk_node_names(node_ids: list[int]) -> dict[int, str]:
                         node_name_cache[node_id] = display_name
 
         except Exception as e:
-            logger.error(f"Error getting bulk node names: {e}")
+            logger.error("Error getting bulk node names: %s", e)
             # Return fallback names for all uncached IDs
             for node_id in uncached_ids:
                 result[node_id] = f"!{node_id:08x}"
 
-    logger.debug(f"Bulk node names completed: {len(result)} names returned")
+    logger.debug("Bulk node names completed: %s names returned", len(result))
     return result
 
 

@@ -2,6 +2,7 @@
 Marshmallow validation schemas for API endpoints.
 """
 
+from typing import Any, Dict
 from marshmallow import Schema, fields, validate, validates_schema, ValidationError
 
 
@@ -10,60 +11,49 @@ class PacketFilterSchema(Schema):
 
     limit = fields.Int(
         validate=validate.Range(min=1, max=1000),
-        missing=100,
-        description="Number of packets to return"
+        load_default=100
     )
     page = fields.Int(
         validate=validate.Range(min=1),
-        missing=1,
-        description="Page number"
+        load_default=1
     )
     gateway_id = fields.Str(
         validate=validate.Length(max=50),
-        allow_none=True,
-        description="Gateway ID filter"
+        allow_none=True
     )
     from_node = fields.Int(
         validate=validate.Range(min=0),
-        allow_none=True,
-        description="Source node ID"
+        allow_none=True
     )
     to_node = fields.Int(
         validate=validate.Range(min=0),
-        allow_none=True,
-        description="Destination node ID"
+        allow_none=True
     )
     portnum = fields.Str(
         validate=validate.Length(max=50),
-        allow_none=True,
-        description="Port number filter"
+        allow_none=True
     )
     min_rssi = fields.Int(
         validate=validate.Range(min=-200, max=0),
-        allow_none=True,
-        description="Minimum RSSI value"
+        allow_none=True
     )
     max_rssi = fields.Int(
         validate=validate.Range(min=-200, max=0),
-        allow_none=True,
-        description="Maximum RSSI value"
+        allow_none=True
     )
     hop_count = fields.Int(
         validate=validate.Range(min=0, max=10),
-        allow_none=True,
-        description="Hop count filter"
+        allow_none=True
     )
     start_time = fields.DateTime(
-        allow_none=True,
-        description="Start time filter"
+        allow_none=True
     )
     end_time = fields.DateTime(
-        allow_none=True,
-        description="End time filter"
+        allow_none=True
     )
 
     @validates_schema
-    def validate_time_range(self, data, **kwargs):
+    def validate_time_range(self, data: Dict[str, Any], **kwargs: Any) -> None:
         """Validate that start_time is before end_time."""
         start_time = data.get('start_time')
         end_time = data.get('end_time')
@@ -77,33 +67,27 @@ class NodeFilterSchema(Schema):
 
     limit = fields.Int(
         validate=validate.Range(min=1, max=1000),
-        missing=100,
-        description="Number of nodes to return"
+        load_default=100
     )
     page = fields.Int(
         validate=validate.Range(min=1),
-        missing=1,
-        description="Page number"
+        load_default=1
     )
     search = fields.Str(
         validate=validate.Length(max=100),
-        allow_none=True,
-        description="Search term"
+        allow_none=True
     )
     hw_model = fields.Str(
         validate=validate.Length(max=50),
-        allow_none=True,
-        description="Hardware model filter"
+        allow_none=True
     )
     role = fields.Str(
         validate=validate.Length(max=50),
-        allow_none=True,
-        description="Node role filter"
+        allow_none=True
     )
     primary_channel = fields.Str(
         validate=validate.Length(max=50),
-        allow_none=True,
-        description="Primary channel filter"
+        allow_none=True
     )
 
 
@@ -112,41 +96,33 @@ class TracerouteFilterSchema(Schema):
 
     limit = fields.Int(
         validate=validate.Range(min=1, max=1000),
-        missing=100,
-        description="Number of traceroutes to return"
+        load_default=100
     )
     page = fields.Int(
         validate=validate.Range(min=1),
-        missing=1,
-        description="Page number"
+        load_default=1
     )
     gateway_id = fields.Str(
         validate=validate.Length(max=50),
-        allow_none=True,
-        description="Gateway ID filter"
+        allow_none=True
     )
     from_node = fields.Int(
         validate=validate.Range(min=0),
-        allow_none=True,
-        description="Source node ID"
+        allow_none=True
     )
     to_node = fields.Int(
         validate=validate.Range(min=0),
-        allow_none=True,
-        description="Destination node ID"
+        allow_none=True
     )
     success_only = fields.Bool(
-        allow_none=True,
-        description="Filter for successful traceroutes only"
+        allow_none=True
     )
     return_path_only = fields.Bool(
-        allow_none=True,
-        description="Filter for traceroutes with return path only"
+        allow_none=True
     )
     route_node = fields.Int(
         validate=validate.Range(min=0),
-        allow_none=True,
-        description="Filter by route node ID"
+        allow_none=True
     )
 
 
@@ -155,23 +131,19 @@ class AnalyticsFilterSchema(Schema):
 
     gateway_id = fields.Str(
         validate=validate.Length(max=50),
-        allow_none=True,
-        description="Gateway ID filter"
+        allow_none=True
     )
     from_node = fields.Int(
         validate=validate.Range(min=0),
-        allow_none=True,
-        description="Source node ID"
+        allow_none=True
     )
     hop_count = fields.Int(
         validate=validate.Range(min=0, max=10),
-        allow_none=True,
-        description="Hop count filter"
+        allow_none=True
     )
     hours = fields.Int(
         validate=validate.Range(min=1, max=168),  # Max 7 days
-        missing=24,
-        description="Time range in hours"
+        load_default=24
     )
 
 
@@ -179,11 +151,9 @@ class HealthCheckSchema(Schema):
     """Schema for health check parameters."""
 
     detailed = fields.Bool(
-        missing=False,
-        description="Include detailed health information"
+        load_default=False
     )
     timeout = fields.Int(
         validate=validate.Range(min=1, max=30),
-        missing=5,
-        description="Health check timeout in seconds"
+        load_default=5
     )

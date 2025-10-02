@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from typing import Any, Optional
 
 from flask import Flask
 from markupsafe import Markup
@@ -25,21 +26,21 @@ def create_app() -> Flask:
 
     # Register template filters
     @app.template_filter("format_rssi")
-    def format_rssi(value):
+    def format_rssi(value: Optional[float]) -> str:
         """Format RSSI value for display."""
         if value is None:
             return "?"
         return f"{value:.0f}"
 
     @app.template_filter("format_snr")
-    def format_snr(value):
+    def format_snr(value: Optional[float]) -> str:
         """Format SNR value for display."""
         if value is None:
             return "?"
         return f"{value:.1f}"
 
     @app.template_filter("markdown")
-    def markdown_filter(text):
+    def markdown_filter(text: Optional[str]) -> str:
         """Convert markdown to HTML."""
         if not text:
             return ""
@@ -51,7 +52,7 @@ def create_app() -> Flask:
             return text
 
     @app.template_filter("pretty_json")
-    def pretty_json_filter(data):
+    def pretty_json_filter(data: Any) -> Markup:
         """Convert data to pretty JSON string."""
         import json
 
@@ -62,7 +63,7 @@ def create_app() -> Flask:
         return Markup(rendered)
 
     @app.template_filter("safe_json")
-    def safe_json_filter(data, indent=None, **kwargs):
+    def safe_json_filter(data: Any, indent: Optional[int] = None, **kwargs: Any) -> str:
         """Convert data to JSON string with optional indentation."""
         import json
 
@@ -109,7 +110,7 @@ def create_app() -> Flask:
 application = create_app()
 
 
-def main():
+def main() -> None:
     """Main entry point for running the Flask development server."""
     app = create_app()
     config = get_config()

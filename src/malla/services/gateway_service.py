@@ -45,10 +45,10 @@ class GatewayService:
         if cache_key in GatewayService._cache:
             cached_time, cached_data = GatewayService._cache[cache_key]
             if now - cached_time < GatewayService._cache_ttl_seconds:
-                logger.debug(f"Returning cached gateway statistics for {hours}h")
+                logger.debug("Returning cached gateway statistics for %sh", hours)
                 return cached_data
 
-        logger.info(f"Computing gateway statistics for {hours}h (cache miss)")
+        logger.info("Computing gateway statistics for %sh (cache miss)", hours)
         start_time = time.time()
 
         try:
@@ -156,7 +156,7 @@ class GatewayService:
             return result
 
         except Exception as e:
-            logger.error(f"Error computing gateway statistics: {e}")
+            logger.error("Error computing gateway statistics: %s", e)
             # Re-raise the exception to let the caller handle it
             raise RuntimeError(f"Failed to compute gateway statistics: {e}") from e
 
@@ -202,7 +202,7 @@ class GatewayService:
                 AND timestamp >= %s AND timestamp <= %s
                 GROUP BY from_node_id
             """,
-                params,
+                tuple(params),
             )
 
             result = {}
@@ -223,11 +223,11 @@ class GatewayService:
             return result
 
         except Exception as e:
-            logger.error(f"Error getting node gateway counts: {e}")
+            logger.error("Error getting node gateway counts: %s", e)
             return dict.fromkeys(node_ids, 0)
 
     @staticmethod
-    def clear_cache():
+    def clear_cache() -> None:
         """Clear the gateway statistics cache."""
         GatewayService._cache.clear()
         logger.info("Gateway service cache cleared")
@@ -278,7 +278,7 @@ class GatewayService:
             return gateways
 
         except Exception as e:
-            logger.error(f"Error getting available gateways: {e}")
+            logger.error("Error getting available gateways: %s", e)
             raise
 
     @staticmethod

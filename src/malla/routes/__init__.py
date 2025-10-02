@@ -2,6 +2,8 @@
 Routes package for Meshtastic Mesh Health Web UI
 """
 
+from flask import Flask
+
 from .api_routes import api_bp
 from .gateway_routes import gateway_bp
 
@@ -12,7 +14,7 @@ from .packet_routes import packet_bp
 from .traceroute_routes import traceroute_bp
 
 
-def register_routes(app):
+def register_routes(app: Flask) -> None:
     """Register all route blueprints with the Flask app."""
     app.register_blueprint(main_bp)
     app.register_blueprint(packet_bp)

@@ -3,6 +3,7 @@ Main routes for the Meshtastic Mesh Health Web UI
 """
 
 import logging
+from typing import Union, Tuple
 
 from flask import Blueprint, render_template
 
@@ -16,7 +17,7 @@ main_bp = Blueprint("main", __name__)
 
 
 @main_bp.route("/")
-def dashboard():
+def dashboard() -> Union[str, Tuple[str, int]]:
     """Dashboard route with network statistics."""
     try:
         # Get basic dashboard stats
@@ -40,7 +41,7 @@ def dashboard():
             APP_NAME="Malla",
         )
     except Exception as e:
-        logger.error(f"Error loading dashboard: {e}")
+        logger.error("Error loading dashboard: %s", e)
         # Fallback to basic stats without gateway info
         stats = DashboardRepository.get_stats()
         from ..config import get_config
@@ -58,32 +59,32 @@ def dashboard():
 
 
 @main_bp.route("/map")
-def map_view():
+def map_view() -> Union[str, Tuple[str, int]]:
     """Node location map view."""
     try:
         return render_template("map.html")
     except Exception as e:
-        logger.error(f"Error in map route: {e}")
+        logger.error("Error in map route: %s", e)
         return f"Map error: {e}", 500
 
 
 @main_bp.route("/longest-links")
-def longest_links():
+def longest_links() -> Union[str, Tuple[str, int]]:
     """Longest links analysis page."""
     logger.info("Longest links route accessed")
     try:
         return render_template("longest_links.html")
     except Exception as e:
-        logger.error(f"Error in longest links route: {e}")
+        logger.error("Error in longest links route: %s", e)
         return f"Longest links error: {e}", 500
 
 
 # Packet heatmap view.  Displays a heatmap of packet activity per node.
 @main_bp.route("/packet-heatmap")
-def packet_heatmap():
+def packet_heatmap() -> Union[str, Tuple[str, int]]:
     """Render the packet heatmap page."""
     try:
         return render_template("packet_heatmap.html")
     except Exception as e:
-        logger.error(f"Error in packet heatmap route: {e}")
+        logger.error("Error in packet heatmap route: %s", e)
         return f"Packet heatmap error: {e}", 500

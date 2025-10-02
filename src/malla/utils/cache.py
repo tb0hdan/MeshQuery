@@ -68,7 +68,7 @@ class SimpleCache:
                 removed_count += 1
 
         if removed_count > 0:
-            logger.info(f"Cleaned up {removed_count} expired cache entries")
+            logger.info("Cleaned up %s expired cache entries", removed_count)
 
         return removed_count
 

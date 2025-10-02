@@ -5,9 +5,9 @@ API routes for the Meshtastic Mesh Health Web UI
 import json
 import logging
 import time
-from typing import Any
+from typing import Any, Union, Tuple, Dict
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, Response
 
 from ..database import (
     DashboardRepository,
@@ -36,7 +36,7 @@ api_bp = Blueprint("api", __name__, url_prefix="/api")
 
 
 @api_bp.route("/stats")
-def api_stats():
+def api_stats() -> Union[Response, Tuple[Response, int]]:
     """API endpoint for dashboard statistics."""
     logger.info("API stats endpoint accessed")
     try:
@@ -44,48 +44,48 @@ def api_stats():
         stats = DashboardRepository.get_stats(gateway_id=gateway_id)
         return safe_jsonify(stats)
     except Exception as e:
-        logger.error(f"Error in API stats: {e}")
+        logger.error("Error in API stats: %s", e)
         return jsonify({"error": str(e)}), 500
 
 
 @api_bp.route("/meshtastic/hardware-models")
-def api_hardware_models():
+def api_hardware_models() -> Union[Response, Tuple[Response, int]]:
     """API endpoint for available hardware models from Meshtastic protobuf."""
     logger.info("API hardware models endpoint accessed")
     try:
         hardware_models = MeshtasticService.get_hardware_models()
         return jsonify({"hardware_models": hardware_models})
     except Exception as e:
-        logger.error(f"Error in API hardware models: {e}")
+        logger.error("Error in API hardware models: %s", e)
         return jsonify({"error": str(e), "hardware_models": []}), 500
 
 
 @api_bp.route("/meshtastic/packet-types")
-def api_packet_types():
+def api_packet_types() -> Union[Response, Tuple[Response, int]]:
     """API endpoint for available packet types from Meshtastic protobuf."""
     logger.info("API packet types endpoint accessed")
     try:
         packet_types = MeshtasticService.get_packet_types()
         return jsonify({"packet_types": packet_types})
     except Exception as e:
-        logger.error(f"Error in API packet types: {e}")
+        logger.error("Error in API packet types: %s", e)
         return jsonify({"error": str(e), "packet_types": []}), 500
 
 
 @api_bp.route("/meshtastic/node-roles")
-def api_node_roles():
+def api_node_roles() -> Union[Response, Tuple[Response, int]]:
     """API endpoint for available node roles from Meshtastic protobuf."""
     logger.info("API node roles endpoint accessed")
     try:
         node_roles = MeshtasticService.get_node_roles()
         return jsonify({"node_roles": node_roles})
     except Exception as e:
-        logger.error(f"Error in API node roles: {e}")
+        logger.error("Error in API node roles: %s", e)
         return jsonify({"error": str(e), "node_roles": []}), 500
 
 
 @api_bp.route("/analytics")
-def api_analytics():
+def api_analytics() -> Union[Response, Tuple[Response, int]]:
     """API endpoint for analytics data."""
     logger.info("API analytics endpoint accessed")
     try:
@@ -98,12 +98,12 @@ def api_analytics():
         )
         return safe_jsonify(analytics_data)
     except Exception as e:
-        logger.error(f"Error in API analytics: {e}")
+        logger.error("Error in API analytics: %s", e)
         return jsonify({"error": str(e)}), 500
 
 
 @api_bp.route("/packets/recent")
-def api_packets_recent():
+def api_packets_recent() -> Union[Response, Tuple[Response, int]]:
     """API endpoint for recent packet data (used by live pages)."""
     logger.info("API packets recent endpoint accessed")
     try:
@@ -147,19 +147,19 @@ def api_packets_recent():
 
         return jsonify(recent_packets)
     except Exception as e:
-        logger.error(f"Error in API packets recent: {e}")
+        logger.error("Error in API packets recent: %s", e)
         return jsonify({"error": str(e)}), 500
 
 
 @api_bp.route("/packets/stream")
-def api_packets_stream():
+def api_packets_stream() -> Union[Response, Tuple[Response, int]]:
     """Server-Sent Events endpoint for live packet streaming."""
     import json
     import time
 
     from flask import Response, stream_with_context
 
-    def event_stream():
+    def event_stream() -> Any:
         try:
             yield "event: ping\n"
             yield 'data: {"ok":true}\n\n'
@@ -205,12 +205,12 @@ def api_packets_stream():
                             last_packet_time = packet_time
 
                 except Exception as e:
-                    logger.warning(f"Error in packet stream: {e}")
+                    logger.warning("Error in packet stream: %s", e)
 
                 time.sleep(1)  # Poll every second
 
         except Exception as e:
-            logger.error(f"SSE stream error: {e}")
+            logger.error("SSE stream error: %s", e)
 
     headers = {
         "Content-Type": "text/event-stream",
@@ -222,7 +222,7 @@ def api_packets_stream():
 
 
 @api_bp.route("/links")
-def api_links():
+def api_links() -> Union[Response, Tuple[Response, int]]:
     """API endpoint for network links data with distance filtering."""
     logger.info("API links endpoint accessed")
     try:
@@ -266,9 +266,9 @@ def api_links():
                         "lon": packet.get("longitude"),
                     }
         except Exception as e:
-            logger.warning(f"Could not get node positions: {e}")
+            logger.warning("Could not get node positions: %s", e)
 
-        def calculate_distance(lat1, lon1, lat2, lon2):
+        def calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
             """Calculate distance between two points in kilometers."""
             R = 6371  # Earth's radius in kilometers
             dlat = math.radians(lat2 - lat1)
@@ -335,16 +335,16 @@ def api_links():
                         )
                         seen_links.add(link_key1)
 
-        logger.info(f"Filtered {len(links)} links (max distance: {max_distance_km}km)")
+        logger.info("Filtered %s links (max distance: %skm)", len(links), max_distance_km)
         return jsonify(links)
 
     except Exception as e:
-        logger.error(f"Error in API links: {e}")
+        logger.error("Error in API links: %s", e)
         return jsonify({"error": str(e)}), 500
 
 
 @api_bp.route("/health")
-def api_health():
+def api_health() -> Union[Response, Tuple[Response, int]]:
     """Comprehensive health check endpoint."""
     import time
 
@@ -415,14 +415,14 @@ def api_health():
         ), status_code
 
     except Exception as e:
-        logger.error(f"Health check error: {e}")
+        logger.error("Health check error: %s", e)
         return jsonify(
             {"status": "unhealthy", "error": str(e), "timestamp": time.time()}
         ), 503
 
 
 @api_bp.route("/packets")
-def api_packets():
+def api_packets() -> Union[Response, Tuple[Response, int]]:
     """API endpoint for packet data."""
     logger.info("API packets endpoint accessed")
     try:
@@ -511,12 +511,12 @@ def api_packets():
 
         return jsonify(data)
     except Exception as e:
-        logger.error(f"Error in API packets: {e}")
+        logger.error("Error in API packets: %s", e)
         return jsonify({"error": str(e)}), 500
 
 
 @api_bp.route("/nodes")
-def api_nodes():
+def api_nodes() -> Union[Response, Tuple[Response, int]]:
     """API endpoint for node data (with optional search)."""
     logger.info("API nodes endpoint accessed")
     try:
@@ -536,12 +536,12 @@ def api_nodes():
 
         return jsonify(data)
     except Exception as e:
-        logger.error(f"Error in API nodes: {e}")
+        logger.error("Error in API nodes: %s", e)
         return jsonify({"error": str(e)}), 500
 
 
 @api_bp.route("/nodes/search")
-def api_nodes_search():
+def api_nodes_search() -> Union[Response, Tuple[Response, int]]:
     """API endpoint for searching nodes by name or ID."""
     logger.info("API nodes search endpoint accessed")
     try:
@@ -595,7 +595,7 @@ def api_nodes_search():
             total_count = result.get("total_count", 0)
         except Exception as db_error:
             # If database call fails, return empty results without crashing
-            logger.info(f"Database search failed, returning empty results: {db_error}")
+            logger.info("Database search failed, returning empty results: %s", db_error)
             nodes = []
             total_count = 0
 
@@ -608,24 +608,24 @@ def api_nodes_search():
             }
         )
     except Exception as e:
-        logger.error(f"Error in API nodes search: {e}")
+        logger.error("Error in API nodes search: %s", e)
         return jsonify({"error": str(e)}), 500
 
 
 @api_bp.route("/gateways")
-def api_gateways():
+def api_gateways() -> Union[Response, Tuple[Response, int]]:
     """API endpoint for gateway list."""
     logger.info("API gateways endpoint accessed")
     try:
         gateways = PacketRepository.get_unique_gateway_ids()
         return jsonify({"gateways": gateways})
     except Exception as e:
-        logger.error(f"Error in API gateways: {e}")
+        logger.error("Error in API gateways: %s", e)
         return jsonify({"error": str(e)}), 500
 
 
 @api_bp.route("/gateways/search")
-def api_gateways_search():
+def api_gateways_search() -> Union[Response, Tuple[Response, int]]:
     """API endpoint for searching gateways by name or ID."""
     logger.info("API gateways search endpoint accessed")
     try:
@@ -759,12 +759,12 @@ def api_gateways_search():
             }
         )
     except Exception as e:
-        logger.error(f"Error in API gateways search: {e}")
+        logger.error("Error in API gateways search: %s", e)
         return jsonify({"error": str(e)}), 500
 
 
 @api_bp.route("/packets/signal")
-def api_packets_signal():
+def api_packets_signal() -> Union[Response, Tuple[Response, int]]:
     """API endpoint for packet signal quality data."""
     logger.info("API packets signal endpoint accessed")
     try:
@@ -806,12 +806,12 @@ def api_packets_signal():
             }
         )
     except Exception as e:
-        logger.error(f"Error in API packets signal: {e}")
+        logger.error("Error in API packets signal: %s", e)
         return jsonify({"error": str(e)}), 500
 
 
 @api_bp.route("/traceroute")
-def api_traceroute():
+def api_traceroute() -> Union[Response, Tuple[Response, int]]:
     """API endpoint for traceroute data."""
     logger.info("API traceroute endpoint accessed")
     try:
@@ -840,12 +840,12 @@ def api_traceroute():
 
         return safe_jsonify(data)
     except Exception as e:
-        logger.error(f"Error in API traceroute: {e}")
+        logger.error("Error in API traceroute: %s", e)
         return jsonify({"error": str(e)}), 500
 
 
 @api_bp.route("/traceroute/analytics")
-def api_traceroute_analytics():
+def api_traceroute_analytics() -> Union[Response, Tuple[Response, int]]:
     """API endpoint for traceroute analytics."""
     logger.info("API traceroute analytics endpoint accessed")
     try:
@@ -875,14 +875,14 @@ def api_traceroute_analytics():
                     }
                 ), 504
     except Exception as e:
-        logger.error(f"Error in API traceroute analytics: {e}")
+        logger.error("Error in API traceroute analytics: %s", e)
         return jsonify({"error": str(e)}), 500
 
 
 @api_bp.route("/traceroute/<int:packet_id>")
-def api_traceroute_details(packet_id):
+def api_traceroute_details(packet_id: int) -> Union[Response, Tuple[Response, int]]:
     """API endpoint for specific traceroute details."""
-    logger.info(f"API traceroute details endpoint accessed for packet {packet_id}")
+    logger.info("API traceroute details endpoint accessed for packet %s", packet_id)
     try:
         # Get specific traceroute packet
         traceroute = TracerouteRepository.get_traceroute_details(packet_id)
@@ -895,12 +895,12 @@ def api_traceroute_details(packet_id):
 
         return jsonify(traceroute)
     except Exception as e:
-        logger.error(f"Error in API traceroute details: {e}")
+        logger.error("Error in API traceroute details: %s", e)
         return jsonify({"error": str(e)}), 500
 
 
 @api_bp.route("/locations")
-def api_locations():
+def api_locations() -> Union[Response, Tuple[Response, int]]:
     """
     API endpoint for node location data with network topology.
     Returns up to 14 days of data for client-side filtering.
@@ -908,7 +908,7 @@ def api_locations():
     logger.info("API locations endpoint accessed")
     try:
         # Build filters from request parameters
-        filters = {}
+        filters: Dict[str, Any] = {}
 
         # Always limit to last 14 days for performance
         from datetime import datetime, timedelta
@@ -927,8 +927,9 @@ def api_locations():
                 return jsonify({"error": "Invalid gateway_id format"}), 400
 
         # Search filter (keep this server-side for performance)
-        if request.args.get("search"):
-            filters["search"] = request.args.get("search")
+        search_arg = request.args.get("search")
+        if search_arg:
+            filters["search"] = search_arg
 
         # Get enhanced location data with network topology
         locations = LocationService.get_node_locations(filters)
@@ -953,26 +954,26 @@ def api_locations():
             }
         )
     except Exception as e:
-        logger.error(f"Error in API locations: {e}")
+        logger.error("Error in API locations: %s", e)
         return jsonify({"error": str(e)}), 500
 
 
 @api_bp.route("/traceroute/patterns")
-def api_traceroute_patterns():
+def api_traceroute_patterns() -> Union[Response, Tuple[Response, int]]:
     """API endpoint for traceroute route patterns."""
     logger.info("API traceroute patterns endpoint accessed")
     try:
         data = TracerouteService.get_route_patterns()
         return jsonify(data)
     except Exception as e:
-        logger.error(f"Error in API traceroute patterns: {e}")
+        logger.error("Error in API traceroute patterns: %s", e)
         return jsonify({"error": str(e)}), 500
 
 
 @api_bp.route("/node/<node_id>/info")
-def api_node_info(node_id):
+def api_node_info(node_id: str) -> Union[Response, Tuple[Response, int]]:
     """API endpoint for basic node information (optimized for tooltips and pickers)."""
-    logger.info(f"API node info endpoint accessed for node {node_id}")
+    logger.info("API node info endpoint accessed for node %s", node_id)
     try:
         # Convert node_id to int
         from ..utils.node_utils import convert_node_id
@@ -1033,14 +1034,14 @@ def api_node_info(node_id):
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
-        logger.error(f"Error in API node info: {e}")
+        logger.error("Error in API node info: %s", e)
         return jsonify({"error": str(e)}), 500
 
 
 @api_bp.route("/node/<node_id>/location-history")
-def api_node_location_history(node_id):
+def api_node_location_history(node_id: str) -> Union[Response, Tuple[Response, int]]:
     """API endpoint for node location history."""
-    logger.info(f"API node location history endpoint accessed for node {node_id}")
+    logger.info("API node location history endpoint accessed for node %s", node_id)
     try:
         limit = request.args.get("limit", 100, type=int)
         history = NodeService.get_node_location_history(node_id, limit=limit)
@@ -1048,14 +1049,14 @@ def api_node_location_history(node_id):
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
-        logger.error(f"Error in API node location history: {e}")
+        logger.error("Error in API node location history: %s", e)
         return jsonify({"error": str(e)}), 500
 
 
 @api_bp.route("/node/<node_id>/direct-receptions")
-def api_node_direct_receptions(node_id):
+def api_node_direct_receptions(node_id: str) -> Union[Response, Tuple[Response, int]]:
     """API endpoint for bidirectional direct receptions (0-hop packets)."""
-    logger.info(f"API direct receptions endpoint accessed for node {node_id}")
+    logger.info("API direct receptions endpoint accessed for node %s", node_id)
     try:
         limit = request.args.get("limit", 1000, type=int)
         direction = request.args.get("direction", "received", type=str)
@@ -1084,38 +1085,38 @@ def api_node_direct_receptions(node_id):
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
-        logger.error(f"Error in API direct receptions: {e}")
+        logger.error("Error in API direct receptions: %s", e)
         return jsonify({"error": str(e)}), 500
 
 
 @api_bp.route("/location/statistics")
-def api_location_statistics():
+def api_location_statistics() -> Union[Response, Tuple[Response, int]]:
     """API endpoint for location statistics."""
     logger.info("API location statistics endpoint accessed")
     try:
         stats = LocationService.get_location_statistics()
         return safe_jsonify(stats)
     except Exception as e:
-        logger.error(f"Error in API location statistics: {e}")
+        logger.error("Error in API location statistics: %s", e)
         return jsonify({"error": str(e)}), 500
 
 
 @api_bp.route("/location/hop-distances")
-def api_location_hop_distances():
+def api_location_hop_distances() -> Union[Response, Tuple[Response, int]]:
     """API endpoint for hop distances between nodes."""
     logger.info("API location hop distances endpoint accessed")
     try:
         distances = LocationService.get_node_hop_distances()
         return safe_jsonify({"hop_distances": distances, "total_pairs": len(distances)})
     except Exception as e:
-        logger.error(f"Error in API location hop distances: {e}")
+        logger.error("Error in API location hop distances: %s", e)
         return jsonify({"error": str(e)}), 500
 
 
 @api_bp.route("/node/<node_id>/neighbors")
-def api_node_neighbors(node_id):
+def api_node_neighbors(node_id: str) -> Union[Response, Tuple[Response, int]]:
     """API endpoint for node neighbors within a certain distance."""
-    logger.info(f"API node neighbors endpoint accessed for node {node_id}")
+    logger.info("API node neighbors endpoint accessed for node %s", node_id)
     try:
         max_distance = request.args.get("max_distance", 10.0, type=float)
         neighbors = NodeService.get_node_neighbors(node_id, max_distance=max_distance)
@@ -1123,12 +1124,12 @@ def api_node_neighbors(node_id):
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
-        logger.error(f"Error in API node neighbors: {e}")
+        logger.error("Error in API node neighbors: %s", e)
         return jsonify({"error": str(e)}), 500
 
 
 @api_bp.route("/longest-links")
-def api_longest_links():
+def api_longest_links() -> Union[Response, Tuple[Response, int]]:
     """API endpoint for longest links analysis."""
     logger.info("API longest links endpoint accessed")
     try:
@@ -1144,12 +1145,12 @@ def api_longest_links():
 
         return safe_jsonify(data)
     except Exception as e:
-        logger.error(f"Error in API longest links: {e}")
+        logger.error("Error in API longest links: %s", e)
         return jsonify({"error": str(e)}), 500
 
 
 @api_bp.route("/longest-links/refresh", methods=["POST"])
-def api_longest_links_refresh():
+def api_longest_links_refresh() -> Union[Response, Tuple[Response, int]]:
     """API endpoint for refreshing the longest links materialized view."""
     logger.info("API longest links refresh endpoint accessed")
     try:
@@ -1163,12 +1164,12 @@ def api_longest_links_refresh():
             }
         )
     except Exception as e:
-        logger.error(f"Error in API longest links refresh: {e}")
+        logger.error("Error in API longest links refresh: %s", e)
         return jsonify({"error": str(e)}), 500
 
 
 @api_bp.route("/traceroute-hops/nodes")
-def api_traceroute_hops_nodes():
+def api_traceroute_hops_nodes() -> Union[Response, Tuple[Response, int]]:
     """API endpoint for nodes involved in traceroutes with location data."""
     start_time = time.time()
     logger.info("API traceroute-hops/nodes endpoint accessed")
@@ -1256,30 +1257,30 @@ def api_traceroute_hops_nodes():
                 f"Slow traceroute-hops/nodes endpoint: {total_time:.3f}s (db: {db_time:.3f}s, location: {location_time:.3f}s)"
             )
         else:
-            logger.info(f"traceroute-hops/nodes completed in {total_time:.3f}s")
+            logger.info("traceroute-hops/nodes completed in %.3fs", total_time)
 
         return jsonify({"nodes": nodes, "total_count": len(nodes)})
     except Exception as e:
-        logger.error(f"Error in API traceroute-hops/nodes: {e}")
+        logger.error("Error in API traceroute-hops/nodes: %s", e)
         return jsonify({"error": str(e)}), 500
 
 
 @api_bp.route("/traceroute/related-nodes/<node_id>")
-def api_traceroute_related_nodes(node_id):
+def api_traceroute_related_nodes(node_id: str) -> Union[Response, Tuple[Response, int]]:
     """API endpoint for nodes that have traceroute connections to the specified node."""
-    logger.info(f"API traceroute/related-nodes endpoint accessed for node {node_id}")
+    logger.info("API traceroute/related-nodes endpoint accessed for node %s", node_id)
     try:
         related_nodes = NodeService.get_traceroute_related_nodes(node_id)
         return jsonify(related_nodes)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
-        logger.error(f"Error in API traceroute/related-nodes: {e}")
+        logger.error("Error in API traceroute/related-nodes: %s", e)
         return jsonify({"error": str(e)}), 500
 
 
 @api_bp.route("/traceroute/link/<node1_id>/<node2_id>")
-def api_traceroute_link(node1_id, node2_id):
+def api_traceroute_link(node1_id: str, node2_id: str) -> Union[Response, Tuple[Response, int]]:
     """API endpoint for traceroute link analysis between two specific nodes."""
     logger.info(
         f"API traceroute/link endpoint accessed for nodes {node1_id} and {node2_id}"
@@ -1453,12 +1454,12 @@ def api_traceroute_link(node1_id, node2_id):
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
-        logger.error(f"Error in API traceroute graph: {e}")
+        logger.error("Error in API traceroute graph: %s", e)
         return jsonify({"error": str(e)}), 500
 
 
 @api_bp.route("/traceroute/graph")
-def api_traceroute_graph():
+def api_traceroute_graph() -> Union[Response, Tuple[Response, int]]:
     """API endpoint for traceroute network graph data."""
     logger.info("API traceroute graph endpoint accessed")
     try:
@@ -1493,12 +1494,12 @@ def api_traceroute_graph():
         return safe_jsonify(graph_data)
 
     except Exception as e:
-        logger.error(f"Error in API traceroute graph: {e}")
+        logger.error("Error in API traceroute graph: %s", e)
         return jsonify({"error": str(e)}), 500
 
 
 @api_bp.route("/packets/data", methods=["GET"])
-def api_packets_data():
+def api_packets_data() -> Union[Response, Tuple[Response, int]]:
     """Modern table endpoint for packets with structured JSON response."""
     logger.info("API packets modern endpoint accessed")
     try:
@@ -1790,12 +1791,12 @@ def api_packets_data():
 
         return jsonify(response)
     except Exception as e:
-        logger.error(f"Error in API packets modern: {e}")
+        logger.error("Error in API packets modern: %s", e)
         return jsonify({"error": str(e), "data": [], "total_count": 0}), 500
 
 
 @api_bp.route("/nodes/data", methods=["GET"])
-def api_nodes_data():
+def api_nodes_data() -> Union[Response, Tuple[Response, int]]:
     """Modern table endpoint for nodes with structured JSON response."""
     logger.info("API nodes modern endpoint accessed")
     try:
@@ -1874,12 +1875,12 @@ def api_nodes_data():
 
         return jsonify(response)
     except Exception as e:
-        logger.error(f"Error in API nodes modern: {e}")
+        logger.error("Error in API nodes modern: %s", e)
         return jsonify({"error": str(e), "data": [], "total_count": 0}), 500
 
 
 @api_bp.route("/traceroute/data", methods=["GET"])
-def api_traceroute_data():
+def api_traceroute_data() -> Union[Response, Tuple[Response, int]]:
     """Modern table endpoint for traceroutes with structured JSON response."""
     logger.info("API traceroute modern endpoint accessed")
     try:
@@ -2168,12 +2169,12 @@ def api_traceroute_data():
 
         return jsonify(response)
     except Exception as e:
-        logger.error(f"Error in API traceroute modern: {e}")
+        logger.error("Error in API traceroute modern: %s", e)
         return jsonify({"error": str(e), "data": [], "total_count": 0}), 500
 
 
 @api_bp.route("/network-graph")
-def network_graph():
+def network_graph() -> Union[Response, Tuple[Response, int]]:
     """Get network graph data for visualization."""
     try:
         logger.info("API network graph endpoint accessed")
@@ -2205,7 +2206,7 @@ def network_graph():
                         }
                     )
         except Exception as e:
-            logger.warning(f"Could not get traceroute links: {e}")
+            logger.warning("Could not get traceroute links: %s", e)
 
         # Convert nodes to network graph format
         network_nodes = []
@@ -2228,32 +2229,32 @@ def network_graph():
         logger.info(
             f"Network graph API returning {len(network_nodes)} nodes and {len(links)} links"
         )
-        logger.info(f"Sample nodes: {network_nodes[:3] if network_nodes else 'None'}")
-        logger.info(f"Sample links: {links[:3] if links else 'None'}")
+        logger.info("Sample nodes: %s", network_nodes[:5] if network_nodes else [])
+        logger.info("Sample links: %s", links[:5] if links else [])
 
         return jsonify(response)
 
     except Exception as e:
-        logger.error(f"Error in API network graph: {e}")
+        logger.error("Error in API network graph: %s", e)
         return jsonify({"error": str(e)}), 500
 
 
 @api_bp.route("/meshtastic/channels")
-def api_channels():
+def api_channels() -> Union[Response, Tuple[Response, int]]:
     """API endpoint for available primary channels (from node_info)."""
     logger.info("API channels endpoint accessed")
     try:
         channels = NodeRepository.get_unique_primary_channels()
         return jsonify({"channels": channels})
     except Exception as e:
-        logger.error(f"Error in API channels: {e}")
+        logger.error("Error in API channels: %s", e)
         return jsonify({"error": str(e), "channels": []}), 500
 
 
 @api_bp.route("/traceroute/path/<int:src_id>/<int:dst_id>")
-def api_traceroute_path(src_id, dst_id):
+def api_traceroute_path(src_id: str, dst_id: str) -> Union[Response, Tuple[Response, int]]:
     """API endpoint to get full traceroute path between two nodes."""
-    logger.info(f"API traceroute path endpoint accessed: {src_id} -> {dst_id}")
+    logger.info("API traceroute path endpoint accessed: %s -> %s", src_id, dst_id)
     try:
         from datetime import datetime, timedelta
 
@@ -2358,20 +2359,20 @@ def api_traceroute_path(src_id, dst_id):
                             }
                         )
             except Exception as e:
-                logger.warning(f"Could not get node locations: {e}")
+                logger.warning("Could not get node locations: %s", e)
 
         # Sort path by hop count
         path.sort(key=lambda x: x.get("hop", 0))
 
-        logger.info(f"Built traceroute path with {len(path)} nodes")
+        logger.info("Built traceroute path with %s nodes", len(path))
         return jsonify({"path": path, "total_hops": len(path)})
 
     except Exception as e:
-        logger.error(f"Error in traceroute path API: {e}")
+        logger.error("Error in traceroute path API: %s", e)
         return jsonify({"error": str(e)}), 500
 
 
-def safe_jsonify(data, *args, **kwargs):
+def safe_jsonify(data: Any, *args: Any, **kwargs: Any) -> Response:
     """
     A drop-in replacement for Flask's jsonify() that sanitizes NaN/Inf values.
 
@@ -2382,10 +2383,10 @@ def safe_jsonify(data, *args, **kwargs):
         sanitized_data = sanitize_floats(data)
         return jsonify(sanitized_data, *args, **kwargs)
     except Exception as err:
-        logger.debug(f"JSON sanitation failed, using original data: {err}")
+        logger.debug("JSON sanitation failed, using original data: %s", err)
         return jsonify(data, *args, **kwargs)
 
 
-def register_api_routes(app):
+def register_api_routes(app: Any) -> None:
     """Register API routes with the Flask app."""
     app.register_blueprint(api_bp)

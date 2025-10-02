@@ -100,7 +100,7 @@ class AnalyticsService:
             return result
 
         except Exception as e:
-            logger.error(f"Error getting analytics data: {e}")
+            logger.error("Error getting analytics data: %s", e)
             raise
 
     @staticmethod
@@ -197,7 +197,7 @@ class AnalyticsService:
                 SUM(CASE WHEN packet_count >= 1 AND packet_count <= 10 THEN 1 ELSE 0 END) as lightly_active
             FROM node_activity
         """,
-            params,
+            tuple(params),
         )
 
         activity_row = db.fetchone()
@@ -273,7 +273,7 @@ class AnalyticsService:
             FROM packet_history
             WHERE {where_clause}
         """,
-            params,
+            tuple(params),
         )
 
         row = db.fetchone()
@@ -465,7 +465,7 @@ class AnalyticsService:
             ORDER BY tc.count DESC
             LIMIT 15
         """,
-            params,
+            tuple(params),
         )
 
         packet_types = [dict(row) for row in db.fetchall()]
@@ -517,7 +517,7 @@ class AnalyticsService:
             ORDER BY gs.total_packets DESC
             LIMIT 20
         """,
-            params,
+            tuple(params),
         )
 
         gateway_stats = [dict(row) for row in db.fetchall()]

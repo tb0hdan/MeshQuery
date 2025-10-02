@@ -1,5 +1,6 @@
 import os, sys, time
 from pathlib import Path
+import psycopg2
 
 DB_HOST = os.getenv("MALLA_DATABASE_HOST", "localhost")
 DB_PORT = int(os.getenv("MALLA_DATABASE_PORT", "5432"))
@@ -8,7 +9,7 @@ DB_USER = os.getenv("MALLA_DATABASE_USER", "malla")
 DB_PASS = os.getenv("MALLA_DATABASE_PASSWORD", "yourpassword")
 SCHEMA_SQL = os.getenv("MALLA_SCHEMA_SQL", "schema.sql")  # optional
 
-def _connect(max_wait=60):
+def _connect(max_wait: int = 60) -> psycopg2.extensions.connection:
     import psycopg2
     start = time.time()
     last_err = None
@@ -25,7 +26,7 @@ def _connect(max_wait=60):
             time.sleep(1.5)
     raise RuntimeError(f"Could not connect to Postgres at {DB_HOST}:{DB_PORT}/{DB_NAME}: {last_err}")
 
-def _run_schema_sql(conn):
+def _run_schema_sql(conn: psycopg2.extensions.connection) -> None:
     paths = []
     # explicit path via env (file or dir)
     if SCHEMA_SQL and SCHEMA_SQL.strip():
@@ -53,7 +54,7 @@ def _run_schema_sql(conn):
             print(f"[db-init] Applying SQL: {p}")
             cur.execute(sql)
 
-def _try_call_python_schema(conn):
+def _try_call_python_schema(conn: psycopg2.extensions.connection) -> bool:
     # If project provides a pythonized schema initializer, call it.
     # We try a few conventional module names.
     module_names = [
@@ -77,7 +78,7 @@ def _try_call_python_schema(conn):
     print("[db-init] No python schema initializer found; skipped.")
     return False
 
-def main():
+def main() -> None:
     print("[db-init] Starting DB init")
     try:
         conn = _connect()

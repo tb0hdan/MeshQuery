@@ -4,8 +4,9 @@ Gateway comparison routes for Meshtastic Mesh Health Web UI
 
 import logging
 from datetime import datetime
+from typing import Union, Tuple, Dict, Optional
 
-from flask import Blueprint, jsonify, render_template, request
+from flask import Blueprint, jsonify, render_template, request, Response
 
 from ..database.repositories import NodeRepository
 from ..services.gateway_service import GatewayService
@@ -17,7 +18,7 @@ gateway_bp = Blueprint("gateway", __name__, url_prefix="/gateway")
 
 
 @gateway_bp.route("/compare")
-def gateway_compare():
+def gateway_compare() -> Union[str, Tuple[Response, int]]:
     """Gateway comparison page."""
     try:
         # Get available gateways
@@ -88,11 +89,11 @@ def gateway_compare():
                 )
 
             except Exception as e:
-                logger.error(f"Error performing gateway comparison: {e}")
+                logger.error("Error performing gateway comparison: %s", e)
                 comparison_data = {"error": f"Error performing comparison: {str(e)}"}
 
         # Create a proper filters object for the template
-        filters = {
+        template_filters: Dict[str, Optional[str]] = {
             "start_time": request.args.get("start_time"),
             "end_time": request.args.get("end_time"),
             "gateway1": request.args.get("gateway1"),
@@ -106,13 +107,13 @@ def gateway_compare():
             gateway1_id=gateway1_id,
             gateway2_id=gateway2_id,
             comparison_data=comparison_data,
-            filters=filters,
+            filters=template_filters,
         )
 
     except Exception as e:
-        logger.error(f"Error in gateway comparison page: {e}")
+        logger.error("Error in gateway comparison page: %s", e)
         # Create a proper filters object for the template even in error case
-        filters = {
+        template_filters = {
             "start_time": None,
             "end_time": None,
             "gateway1": None,
@@ -124,12 +125,12 @@ def gateway_compare():
             available_gateways=[],
             available_nodes=[],
             error=f"Error loading page: {str(e)}",
-            filters=filters,
+            filters=template_filters,
         )
 
 
 @gateway_bp.route("/api/compare")
-def api_gateway_compare():
+def api_gateway_compare() -> Union[Response, Tuple[Response, int]]:
     """API endpoint for gateway comparison data."""
     try:
         gateway1_id = request.args.get("gateway1")
@@ -196,17 +197,17 @@ def api_gateway_compare():
         return jsonify(comparison_data)
 
     except Exception as e:
-        logger.error(f"Error in gateway comparison API: {e}")
+        logger.error("Error in gateway comparison API: %s", e)
         return jsonify({"error": str(e)}), 500
 
 
 @gateway_bp.route("/api/gateways")
-def api_available_gateways():
+def api_available_gateways() -> Union[Response, Tuple[Response, int]]:
     """API endpoint to get available gateways."""
     try:
         gateways = GatewayService.get_available_gateways()
         return jsonify(gateways)
 
     except Exception as e:
-        logger.error(f"Error getting available gateways: {e}")
+        logger.error("Error getting available gateways: %s", e)
         return jsonify({"error": str(e)}), 500

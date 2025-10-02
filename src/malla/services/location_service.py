@@ -35,7 +35,7 @@ class LocationService:
         service_start = time.time()
         timing_breakdown = {}
 
-        logger.info(f"Getting node locations with filters: {filters}")
+        logger.info("Getting node locations with filters: %s", filters)
 
         # Get basic location data with filters
         repo_start = time.time()
@@ -101,7 +101,7 @@ class LocationService:
                 limit_packets=2000,
             )
         except Exception as e:
-            logger.warning(f"Failed to get network topology data: {e}")
+            logger.warning("Failed to get network topology data: %s", e)
             network_data = {"nodes": [], "links": []}
         timing_breakdown["network_topology"] = time.time() - network_start
 
@@ -116,7 +116,7 @@ class LocationService:
         # Process network links to build neighbor relationships
         for link in network_data.get("links", []):
             if "source" not in link or "target" not in link:
-                logger.warning(f"Link missing source/target fields: {link}")
+                logger.warning("Link missing source/target fields: %s", link)
                 continue
             source_id = link["source"]
             target_id = link["target"]
@@ -233,7 +233,7 @@ class LocationService:
                     )
 
         except Exception as e:
-            logger.warning(f"Failed to get packet links for neighbor data: {e}")
+            logger.warning("Failed to get packet links for neighbor data: %s", e)
 
         timing_breakdown["neighbor_processing"] = time.time() - network_processing_start
 
@@ -355,12 +355,12 @@ class LocationService:
             )
 
             # Convert Tier B format to network graph format with distance filtering
-            network_data = {"links": [], "nodes": {}}
+            network_data: dict[str, Any] = {"links": [], "nodes": {}}
             max_distance_km = 250  # Filter out links longer than 250km
 
-            logger.info(f"Processing {len(tier_b_links)} tier_b_links")
+            logger.info("Processing %s tier_b_links", len(tier_b_links))
             for link in tier_b_links:
-                logger.debug(f"Link structure: {list(link.keys())}")
+                logger.debug("Link structure: %s", list(link.keys()))
 
                 # Check distance and filter out long-distance links (likely MQTT/internet)
                 distance_km = link.get("distance_km")
@@ -415,11 +415,11 @@ class LocationService:
 
                 traceroute_links.append(traceroute_link)
 
-            logger.info(f"Generated {len(traceroute_links)} traceroute links")
+            logger.info("Generated %s traceroute links", len(traceroute_links))
             return traceroute_links
 
         except Exception as e:
-            logger.error(f"Error getting traceroute links: {e}")
+            logger.error("Error getting traceroute links: %s", e)
             return []
 
     @staticmethod
@@ -436,7 +436,7 @@ class LocationService:
         Returns:
             List of location history records with formatted timestamps
         """
-        logger.info(f"Getting location history for node {node_id}, limit={limit}")
+        logger.info("Getting location history for node %s, limit=%s", node_id, limit)
         return LocationRepository.get_node_location_history(node_id, limit)
 
     @staticmethod
@@ -494,7 +494,8 @@ class LocationService:
                 WHERE portnum = 3  -- POSITION_APP
                 AND raw_payload IS NOT NULL
             """)
-            total_position_packets = cursor.fetchone()["total_count"]
+            result = cursor.fetchone()
+            total_position_packets = result["total_count"] if result else 0
 
             # Recent position packets (last 24 hours)
             cursor.execute(
@@ -507,7 +508,8 @@ class LocationService:
             """,
                 (twenty_four_hours_ago,),
             )
-            recent_position_packets = cursor.fetchone()["recent_count"]
+            result = cursor.fetchone()
+            recent_position_packets = result["recent_count"] if result else 0
 
             conn.close()
 
@@ -575,7 +577,7 @@ class LocationService:
             return result
 
         except Exception as e:
-            logger.error(f"Error calculating location statistics: {e}")
+            logger.error("Error calculating location statistics: %s", e)
             raise
 
     @staticmethod
@@ -632,11 +634,11 @@ class LocationService:
             # Sort by distance
             distances.sort(key=lambda x: x["distance_km"])
 
-            logger.info(f"Calculated {len(distances)} potential hop distances")
+            logger.info("Calculated %s potential hop distances", len(distances))
             return distances
 
         except Exception as e:
-            logger.error(f"Error calculating hop distances: {e}")
+            logger.error("Error calculating hop distances: %s", e)
             raise
 
     @staticmethod
@@ -653,7 +655,7 @@ class LocationService:
         Returns:
             List of neighboring nodes with distances
         """
-        logger.info(f"Finding neighbors for node {node_id} within {max_distance_km}km")
+        logger.info("Finding neighbors for node %s within %skm", node_id, max_distance_km)
 
         try:
             locations = LocationService.get_node_locations()
@@ -666,7 +668,7 @@ class LocationService:
                     break
 
             if not target_location:
-                logger.warning(f"No location found for node {node_id}")
+                logger.warning("No location found for node %s", node_id)
                 return []
 
             # Find neighbors within distance
@@ -703,11 +705,11 @@ class LocationService:
             # Sort by distance
             neighbors.sort(key=lambda x: x["distance_km"])
 
-            logger.info(f"Found {len(neighbors)} neighbors for node {node_id}")
+            logger.info("Found %s neighbors for node %s", len(neighbors), node_id)
             return neighbors
 
         except Exception as e:
-            logger.error(f"Error finding neighbors for node {node_id}: {e}")
+            logger.error("Error finding neighbors for node %s: %s", node_id, e)
             raise
 
     @staticmethod
@@ -945,7 +947,7 @@ class LocationService:
                 {where_sql}
                 GROUP BY from_node_id, gateway_id
             """
-            cursor.execute(query, params)
+            cursor.execute(query, tuple(params))
             rows = cursor.fetchall()
             conn.close()
 

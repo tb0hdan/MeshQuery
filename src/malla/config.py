@@ -1,10 +1,13 @@
 
+"""Application configuration module."""
+
 from __future__ import annotations
 import os
 from dataclasses import dataclass
 
 @dataclass
 class AppConfig:
+    """Application configuration dataclass."""
     # Postgres
     database_host: str = os.getenv("MALLA_DATABASE_HOST", "localhost")
     database_port: int = int(os.getenv("MALLA_DATABASE_PORT", "5432"))
@@ -27,9 +30,11 @@ class AppConfig:
     # Back-compat aliases (old code expects cfg.host/port)
     @property
     def host(self) -> str:
+        """Return web host for backward compatibility."""
         return self.web_host
     @property
     def port(self) -> int:
+        """Return web port for backward compatibility."""
         return self.web_port
 
     # Misc
@@ -38,4 +43,5 @@ class AppConfig:
     timezone: str = os.getenv("MALLA_TIMEZONE", "America/New_York")
 
 def get_config() -> AppConfig:
+    """Return the application configuration."""
     return AppConfig()

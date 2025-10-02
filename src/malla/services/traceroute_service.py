@@ -107,7 +107,7 @@ class TracerouteService:
             }
 
         except Exception as e:
-            logger.error(f"Error getting traceroutes: {e}")
+            logger.error("Error getting traceroutes: %s", e)
             raise
 
     @staticmethod
@@ -121,7 +121,7 @@ class TracerouteService:
         Returns:
             Dictionary with analysis data
         """
-        logger.info(f"Getting traceroute analysis for {hours} hours")
+        logger.info("Getting traceroute analysis for %s hours", hours)
 
         # Check cache first
         cache = get_analytics_cache()
@@ -129,14 +129,14 @@ class TracerouteService:
         cached_result = cache.get(cache_key)
 
         if cached_result is not None:
-            logger.info(f"Returning cached traceroute analysis for {hours} hours")
+            logger.info("Returning cached traceroute analysis for %s hours", hours)
             return cached_result
 
         try:
             # Limit hours to prevent excessive processing
             if hours > 168:  # Max 7 days
                 hours = 168
-                logger.warning(f"Hours limited to {hours} for performance")
+                logger.warning("Hours limited to %s for performance", hours)
 
             # Calculate time range
             end_time = datetime.now()
@@ -151,7 +151,7 @@ class TracerouteService:
             # Reduce limit significantly for better performance
             # Use smaller limit and add early processing optimization
             limit = min(200, 50 + (hours * 2))  # Scale with hours but cap at 200
-            logger.info(f"Using limit of {limit} packets for analysis")
+            logger.info("Using limit of %s packets for analysis", limit)
 
             # Get raw traceroute data
             result = TracerouteRepository.get_traceroute_packets(
@@ -180,7 +180,7 @@ class TracerouteService:
             successful_traceroutes = 0
             traceroutes_with_return = 0
             route_lengths = []
-            unique_routes = set()
+            unique_routes: set[tuple[int, int, tuple[int, ...]]] = set()
             node_participation: dict[int, int] = {}
 
             # Process packets with early optimization
@@ -231,7 +231,7 @@ class TracerouteService:
                                             node_participation.get(node_id, 0) + 1
                                         )
                         except Exception as e:
-                            logger.warning(f"Error parsing route data: {e}")
+                            logger.warning("Error parsing route data: %s", e)
                             continue
 
                 processed_count += 1
@@ -281,12 +281,12 @@ class TracerouteService:
 
             # Cache the result for 5 minutes
             cache.set(cache_key, result, ttl=300)
-            logger.info(f"Cached traceroute analysis for {hours} hours")
+            logger.info("Cached traceroute analysis for %s hours", hours)
 
             return result
 
         except Exception as e:
-            logger.error(f"Error in traceroute analysis: {e}")
+            logger.error("Error in traceroute analysis: %s", e)
             raise
 
     @staticmethod
@@ -300,7 +300,7 @@ class TracerouteService:
         Returns:
             Dictionary with route pattern analysis
         """
-        logger.info(f"Getting route patterns (limit={limit})")
+        logger.info("Getting route patterns (limit=%s)", limit)
 
         try:
             # Get recent successful traceroutes
@@ -388,7 +388,7 @@ class TracerouteService:
             }
 
         except Exception as e:
-            logger.error(f"Error getting route patterns: {e}")
+            logger.error("Error getting route patterns: %s", e)
             raise
 
     @staticmethod
@@ -402,7 +402,7 @@ class TracerouteService:
         Returns:
             Dictionary with node's traceroute statistics
         """
-        logger.info(f"Getting traceroute stats for node {node_id}")
+        logger.info("Getting traceroute stats for node %s", node_id)
 
         try:
             # Get traceroutes involving this node as source or destination
@@ -467,7 +467,7 @@ class TracerouteService:
             }
 
         except Exception as e:
-            logger.error(f"Error getting node traceroute stats: {e}")
+            logger.error("Error getting node traceroute stats: %s", e)
             raise
 
     @staticmethod
@@ -482,15 +482,17 @@ class TracerouteService:
 
             # Get single-hop links with error handling
             try:
-                single_hop_links = get_longest_links_optimized(
+                single_hop_links_raw = get_longest_links_optimized(
                     min_distance_km=min_distance_km,
                     min_snr=min_snr,
                     max_results=max_results,
                     hours=168,
                 )
-                logger.info(f"Retrieved {len(single_hop_links)} single-hop links")
+                # Convert RealDictRow to dict for modification
+                single_hop_links = [dict(link) for link in single_hop_links_raw]
+                logger.info("Retrieved %s single-hop links", len(single_hop_links))
             except Exception as e:
-                logger.error(f"Error getting single-hop links: {e}")
+                logger.error("Error getting single-hop links: %s", e)
                 single_hop_links = []
 
             # Get multi-hop links using direct query approach
@@ -562,7 +564,7 @@ class TracerouteService:
                     )
 
             except Exception as e:
-                logger.error(f"Error getting multi-hop links data: {e}")
+                logger.error("Error getting multi-hop links data: %s", e)
                 multi_hop_links = []
 
             # Sort by distance to find the longest
@@ -586,7 +588,7 @@ class TracerouteService:
                     node_ids.add(link["to_node_id"])
 
                 node_names = NodeRepository.get_bulk_node_names(list(node_ids))
-                logger.info(f"Retrieved names for {len(node_names)} nodes")
+                logger.info("Retrieved names for %s nodes", len(node_names))
 
                 # Add node names to links
                 for link in single_hop_links:
@@ -604,7 +606,7 @@ class TracerouteService:
                         link["to_node_id"], f"!{link['to_node_id']:08x}"
                     )
             except Exception as e:
-                logger.error(f"Error getting node names: {e}")
+                logger.error("Error getting node names: %s", e)
                 # Use fallback names
                 for link in single_hop_links:
                     link["from_node_name"] = f"!{link['from_node_id']:08x}"
@@ -643,7 +645,7 @@ class TracerouteService:
             return result
 
         except Exception as e:
-            logger.error(f"Error in longest links analysis: {e}")
+            logger.error("Error in longest links analysis: %s", e)
             # Return empty result with error information
             return {
                 "summary": {
@@ -847,16 +849,16 @@ class TracerouteService:
             from ..database.repositories import LocationRepository
 
             node_ids = list(nodes.keys())
-            logger.info(f"Fetching location data for {len(node_ids)} nodes")
+            logger.info("Fetching location data for %s nodes", len(node_ids))
 
             try:
                 locations = LocationRepository.get_node_locations(
                     {"node_ids": node_ids}
                 )
                 location_map = {loc["node_id"]: loc for loc in locations}
-                logger.info(f"Found location data for {len(location_map)} nodes")
+                logger.info("Found location data for %s nodes", len(location_map))
             except Exception as e:
-                logger.warning(f"Error fetching location data: {e}")
+                logger.warning("Error fetching location data: %s", e)
                 location_map = {}
 
             # Process direct links - calculate average SNR and strength
@@ -959,5 +961,5 @@ class TracerouteService:
             }
 
         except Exception as e:
-            logger.error(f"Error building network graph data: {e}")
+            logger.error("Error building network graph data: %s", e)
             raise

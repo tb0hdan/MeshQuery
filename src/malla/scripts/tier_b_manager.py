@@ -95,7 +95,7 @@ def check_schema() -> bool:
         return hops_table_exists and mv_exists
 
     except Exception as e:
-        logger.error(f"Error checking schema: {e}")
+        logger.error("Error checking schema: %s", e)
         return False
 
 
@@ -140,10 +140,10 @@ def show_stats() -> None:
         print(f"Last MV refresh: {last_refresh_time or 'Unknown'}")
 
     except Exception as e:
-        logger.error(f"Error getting stats: {e}")
+        logger.error("Error getting stats: %s", e)
 
 
-def main():
+def main() -> None:
     """Main entry point for the management script."""
     parser = argparse.ArgumentParser(description="Tier B Pipeline Management")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
@@ -198,7 +198,7 @@ def main():
         logger.info("Operation cancelled by user")
         sys.exit(1)
     except Exception as e:
-        logger.error(f"Error: {e}")
+        logger.error("Error: %s", e)
         sys.exit(1)
 
 

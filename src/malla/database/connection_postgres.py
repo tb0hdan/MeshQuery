@@ -25,21 +25,20 @@ def get_postgres_connection() -> psycopg2.extensions.connection:
     config = get_config()
 
     # Build connection parameters from individual settings
-    conn_params = {
-        "host": config.database_host,
-        "port": config.database_port,
-        "database": config.database_name,
-        "user": config.database_user,
-        "password": config.database_password,
-        "application_name": "malla",
-    }
-
     try:
-        conn = psycopg2.connect(**conn_params, options='-c statement_timeout=7000')
+        conn = psycopg2.connect(
+            host=config.database_host,
+            port=config.database_port,
+            database=config.database_name,
+            user=config.database_user,
+            password=config.database_password,
+            application_name="malla",
+            options='-c statement_timeout=7000'
+        )
         conn.set_session(autocommit=False)
         return conn
     except Exception as e:
-        logger.error(f"Failed to connect to PostgreSQL database: {e}")
+        logger.error("Failed to connect to PostgreSQL database: %s", e)
         raise
 
 
@@ -103,11 +102,13 @@ def init_postgres_database() -> None:
         cursor.execute(
             "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public'"
         )
-        table_count = cursor.fetchone()["count"]
+        row = cursor.fetchone()
+        table_count = row["count"] if row else 0
 
         # Check PostgreSQL version
         cursor.execute("SELECT version()")
-        version = cursor.fetchone()["version"]
+        row = cursor.fetchone()
+        version = row["version"] if row else "unknown"
 
         conn.close()
 
@@ -116,7 +117,7 @@ def init_postgres_database() -> None:
         )
 
     except Exception as e:
-        logger.error(f"PostgreSQL database initialization failed: {e}")
+        logger.error("PostgreSQL database initialization failed: %s", e)
         # Don't raise the exception - let the app start anyway
         # The database might not exist yet or be created by another process
 
@@ -142,7 +143,7 @@ def create_postgres_schema() -> None:
         existing_tables = [row["table_name"] for row in cursor.fetchall()]
 
         if existing_tables and len(existing_tables) >= 3:
-            logger.info(f"Basic tables already exist: {existing_tables}")
+            logger.info("Basic tables already exist: %s", existing_tables)
             # Just create missing indexes (comprehensive set)
             indexes = [
                 # Basic packet history indexes
@@ -182,7 +183,7 @@ def create_postgres_schema() -> None:
                 try:
                     cursor.execute(index_sql)
                 except Exception as e:
-                    logger.warning(f"Could not create index: {e}")
+                    logger.warning("Could not create index: %s", e)
 
             conn.commit()
             conn.close()
@@ -311,8 +312,8 @@ def create_postgres_schema() -> None:
 
             create_tier_b_schema()
         except Exception as e:
-            logger.warning(f"Tier B schema creation failed (may already exist): {e}")
+            logger.warning("Tier B schema creation failed (may already exist): %s", e)
 
     except Exception as e:
-        logger.error(f"Failed to create PostgreSQL schema: {e}")
+        logger.error("Failed to create PostgreSQL schema: %s", e)
         # Don't raise the exception - let the app continue with existing schema

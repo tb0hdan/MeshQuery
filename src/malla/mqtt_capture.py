@@ -17,7 +17,7 @@ import base64
 import logging
 import threading
 import time
-from typing import Any
+from typing import Any, Optional
 
 import paho.mqtt.client as mqtt
 from cryptography.hazmat.backends import default_backend
@@ -69,10 +69,10 @@ def connect_with_retry(client: mqtt.Client, max_retries: int = 10) -> bool:
     for attempt in range(max_retries):
         try:
             client.connect(_cfg.mqtt_broker_address, _cfg.mqtt_port, 60)
-            log.info(f"Connected to MQTT broker on attempt {attempt + 1}")
+            log.info("Connected to MQTT broker on attempt %s", attempt + 1)
             return True
         except Exception as e:
-            log.warning(f"Connection attempt {attempt + 1} failed: {e}")
+            log.warning("Connection attempt %s failed: %s", attempt + 1, e)
             if attempt < max_retries - 1:
                 time.sleep(retry_delay)
                 retry_delay = min(retry_delay * 2, 60)  # Cap at 60 seconds
@@ -110,7 +110,7 @@ def log_with_deduplication(message: str, cache_key: str, ttl_seconds: int = 5) -
         _log_cache[cache_key] = current_time
 
 
-def sanitize_data(s):
+def sanitize_data(s: Any) -> Optional[str]:
     """Sanitize data for database storage."""
     if s is None:
         return None
@@ -148,7 +148,7 @@ def decrypt_packet(
         nonce = packet_id_bytes + sender_id_bytes
 
         if len(nonce) != 16:
-            log.warning(f"Invalid nonce length: {len(nonce)}, expected 16 bytes")
+            log.warning("Invalid nonce length: %s, expected 16 bytes", len(nonce))
             return b""
 
         # Create AES-CTR cipher
@@ -161,12 +161,12 @@ def decrypt_packet(
         decrypted = decryptor.update(encrypted_payload) + decryptor.finalize()
 
         log.debug(
-            f"Successfully decrypted {len(encrypted_payload)} bytes to {len(decrypted)} bytes"
+            "Successfully decrypted %s bytes to %s bytes", len(encrypted_payload), len(decrypted)
         )
         return decrypted
 
     except Exception as e:
-        log.warning(f"Decryption failed: {e}")
+        log.warning("Decryption failed: %s", e)
         return b""
 
 
@@ -217,15 +217,15 @@ def try_decrypt_mesh_packet(
             mesh_packet.decoded.CopyFrom(data_message)
             mesh_packet.encrypted = False
 
-            log.debug(f"Successfully decrypted packet {mesh_packet.id}")
+            log.debug("Successfully decrypted packet %s", mesh_packet.id)
             return True
 
         except Exception as e:
-            log.debug(f"Failed to parse decrypted payload: {e}")
+            log.debug("Failed to parse decrypted payload: %s", e)
             return False
 
     except Exception as e:
-        log.debug(f"Decryption attempt failed: {e}")
+        log.debug("Decryption attempt failed: %s", e)
         return False
 
 
@@ -246,7 +246,7 @@ def update_node_cache(
     is_licensed: bool | None = None,
     mac_address: str | None = None,
     primary_channel: str | None = None,
-):
+) -> None:
     """Update the node cache with node information."""
     try:
         current_time = time.time()
@@ -281,7 +281,7 @@ def update_node_cache(
                 ),
             )
     except Exception as e:
-        log.debug(f"Failed to update node cache: {e}")
+        log.debug("Failed to update node cache: %s", e)
 
 
 def log_packet_to_database(
@@ -367,7 +367,8 @@ def log_packet_to_database(
                  processed_successfully, via_mqtt, want_ack, priority, delayed, channel_index, rx_time,
                  pki_encrypted, next_hop, relay_node, tx_after, message_type, raw_service_envelope, parsing_error)
             VALUES
-                (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                 %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """,
             (
                 current_time,
@@ -433,14 +434,14 @@ def on_disconnect(
 
 def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> None:
     """Callback for when a PUBLISH message is received from the server."""
-    log.debug(f"Received message on topic {msg.topic}: {len(msg.payload)} bytes")
+    log.debug("Received message on topic %s: %s bytes", msg.topic, len(msg.payload))
 
     # Skip JSON messages - we only want protobuf messages
     if "/json/" in msg.topic:
-        log.debug(f"Skipping JSON message on topic {msg.topic}")
+        log.debug("Skipping JSON message on topic %s", msg.topic)
         return
 
-    log.debug(f"Processing protobuf message on topic {msg.topic}")
+    log.debug("Processing protobuf message on topic %s", msg.topic)
 
     # Always store the raw message data first, regardless of parsing success
     raw_service_envelope_data = msg.payload
@@ -456,7 +457,7 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
         topic_parts = msg.topic.split("/")
         if len(topic_parts) >= 4:
             message_type = topic_parts[3]  # Should be 'e', 'c', 'p', etc.
-            log.debug(f"Message type from topic: {message_type}")
+            log.debug("Message type from topic: %s", message_type)
     except Exception:
         pass
 
@@ -480,7 +481,7 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
 
         if is_encrypted_packet:
             log.debug(
-                f"Attempting to decrypt UNKNOWN_APP packet {mesh_packet.id} from {from_node_id_numeric}"
+                "Attempting to decrypt UNKNOWN_APP packet %s from %s", mesh_packet.id, from_node_id_numeric
             )
 
             # Extract channel name from topic if available (for key derivation)
@@ -492,7 +493,7 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
                     potential_channel = topic_parts[4]
                     if not potential_channel.startswith("!"):
                         channel_name = potential_channel
-                        log.debug(f"Using channel name from topic: {channel_name}")
+                        log.debug("Using channel name from topic: %s", channel_name)
             except Exception:
                 pass
 
@@ -504,7 +505,7 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
             # If primary channel decryption failed and we have a channel name, try with channel-specific key
             if not decryption_successful and channel_name:
                 log.debug(
-                    f"Primary key failed, trying channel-specific key for: {channel_name}"
+                    "Primary key failed, trying channel-specific key for: %s", channel_name
                 )
                 decryption_successful = try_decrypt_mesh_packet(
                     mesh_packet,
@@ -514,11 +515,11 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
 
             if decryption_successful:
                 log.info(
-                    f"🔓 Successfully decrypted packet from {get_node_display_name(from_node_id_numeric)}"
+                    "🔓 Successfully decrypted packet from %s", get_node_display_name(from_node_id_numeric)
                 )
             else:
                 log.debug(
-                    f"🔒 Could not decrypt packet {mesh_packet.id} from {from_node_id_numeric}"
+                    "🔒 Could not decrypt packet %s from %s", mesh_packet.id, from_node_id_numeric
                 )
 
         # Update node cache with gateway hex ID if we can determine the numeric ID
@@ -568,7 +569,8 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
             except Exception:
                 cache_key = f"text_{from_node_id_numeric}_{hash(text_content)}"
             log_with_deduplication(
-                f"💬 Text message from {from_node_display} to {to_node_display}{flags_str}: {text_content[:50]}{'...' if len(text_content) > 50 else ''}",
+                (f"💬 Text message from {from_node_display} to {to_node_display}{flags_str}: "
+                 f"{text_content[:50]}{'...' if len(text_content) > 50 else ''}"),
                 cache_key,
                 ttl_seconds=30,  # Suppress duplicate text messages for 30 seconds
             )
@@ -634,7 +636,8 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
                 " (via MQTT)" if getattr(mesh_packet, "via_mqtt", False) else ""
             )
             cache_key = f"nodeinfo_{node_id_from_payload}"
-            message = f"ℹ️ NodeInfo for {node_id_from_payload} from {from_node_display}{via_mqtt_str}: {long_name or short_name or 'No name'}"
+            message = (f"ℹ️ NodeInfo for {node_id_from_payload} from {from_node_display}{via_mqtt_str}: "
+                       f"{long_name or short_name or 'No name'}")
             log_with_deduplication(
                 message,
                 cache_key,
@@ -696,13 +699,14 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
                     _last_env_metrics[from_node_id_numeric] = current_metrics
                     # Use deduplicated logging for environment telemetry to avoid log spam
                     log_with_deduplication(
-                        f"📊 Environment telemetry from {from_node_display}{via_mqtt_str}: Temp {temp_val}, Humidity {humidity_val}",
+                        (f"📊 Environment telemetry from {from_node_display}{via_mqtt_str}: "
+                         f"Temp {temp_val}, Humidity {humidity_val}"),
                         f"env_{from_node_id_numeric}",
                         ttl_seconds=30,
                     )
             else:
                 log.info(
-                    f"📊 Telemetry from {from_node_display}{via_mqtt_str}: Unknown type"
+                    "📊 Telemetry from %s%s: Unknown type", from_node_display, via_mqtt_str
                 )
 
             processed_successfully = True
@@ -751,20 +755,23 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
                         # Deduplicate hop extraction logs to avoid spam when multiple
                         # hops are extracted in rapid succession for the same src/dst.
                         log_with_deduplication(
-                            f"🔍 Traceroute from {from_node_display} to {to_node_display}{via_mqtt_str}: {len(hops_data)} hops extracted",
+                            (f"🔍 Traceroute from {from_node_display} to {to_node_display}{via_mqtt_str}: "
+                             f"{len(hops_data)} hops extracted"),
                             f"traceroute_extracted_{from_node_id_numeric}_{to_node_id_numeric}",
                             ttl_seconds=10,
                         )
                     else:
                         log_with_deduplication(
-                            f"🔍 Traceroute from {from_node_display} to {to_node_display}{via_mqtt_str}: no hops extracted",
+                            (f"🔍 Traceroute from {from_node_display} to {to_node_display}{via_mqtt_str}: "
+                             f"no hops extracted"),
                             f"traceroute_nohop_{from_node_id_numeric}_{to_node_id_numeric}",
                             ttl_seconds=10,
                         )
                 else:
                     # Deduplicate skipped processing logs
                     log_with_deduplication(
-                        f"🔍 Traceroute from {from_node_display} to {to_node_display}{via_mqtt_str}: skipped processing",
+                        (f"🔍 Traceroute from {from_node_display} to {to_node_display}{via_mqtt_str}: "
+                         f"skipped processing"),
                         f"traceroute_skip_{from_node_id_numeric}_{to_node_id_numeric}",
                         ttl_seconds=10,
                     )
@@ -772,7 +779,7 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
                 processed_successfully = True
 
             except Exception as e:
-                log.warning(f"Failed to process traceroute packet: {e}")
+                log.warning("Failed to process traceroute packet: %s", e)
                 processed_successfully = True  # Still log the packet
 
         elif mesh_packet.decoded.portnum == portnums_pb2.PortNum.MAP_REPORT_APP:
@@ -803,7 +810,8 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
                 )
 
                 log_with_deduplication(
-                    f"🗺️ MAP_REPORT from {from_node_display}{via_mqtt_str}: {lat:.5f}, {lon:.5f} (alt: {alt}m), re-logging as POSITION_APP",
+                    (f"🗺️ MAP_REPORT from {from_node_display}{via_mqtt_str}: {lat:.5f}, {lon:.5f} "
+                     f"(alt: {alt}m), re-logging as POSITION_APP"),
                     f"map_report_{from_node_id_numeric}",
                     ttl_seconds=30,  # Suppress MAP_REPORT duplicates for 30 seconds
                 )
@@ -822,7 +830,7 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
                 processed_successfully = True
 
             except Exception as e:
-                log.warning(f"Could not parse MapReport: {e}")
+                log.warning("Could not parse MapReport: %s", e)
                 # Log the original MAP_REPORT packet even if parsing fails
                 processed_successfully = True
 
@@ -846,12 +854,14 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
                         portnum_value = 1  # TRACEROUTE_APP
                         portnum_name = "TRACEROUTE_APP"
                         log.info(
-                            f"🔍 Encrypted traceroute packet from {from_node_display}{via_mqtt_str} (decryption failed)"
+                            "🔍 Encrypted traceroute packet from %s%s (decryption failed)",
+                            from_node_display, via_mqtt_str
                         )
                     else:
                         # Deduplicate logs for unknown encrypted packets to avoid spamming
                         log_with_deduplication(
-                            f"🔒 Encrypted packet {port_name} from {from_node_display}{via_mqtt_str} (decryption failed)",
+                            (f"🔒 Encrypted packet {port_name} from {from_node_display}{via_mqtt_str} "
+                             f"(decryption failed)"),
                             f"enc_{from_node_id_numeric}_{port_name}",
                             ttl_seconds=30,
                         )
@@ -881,11 +891,11 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
 
     except UnicodeDecodeError as e:
         parsing_error = f"Unicode decode error: {str(e)}"
-        log.warning(f"Could not decode payload as UTF-8 on topic {msg.topic}: {e}")
+        log.warning("Could not decode payload as UTF-8 on topic %s: %s", msg.topic, e)
     except Exception as e:
         parsing_error = f"Parsing error: {str(e)}"
-        log.error(f"Error processing MQTT protobuf message on topic {msg.topic}: {e}")
-        log.debug(f"Raw payload length: {len(msg.payload)} bytes")
+        log.error("Error processing MQTT protobuf message on topic %s: %s", msg.topic, e)
+        log.debug("Raw payload length: %s bytes", len(msg.payload))
 
     # Always log packet to database, regardless of parsing success
     try:
@@ -898,7 +908,7 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
             parsing_error,
         )
     except Exception as db_error:
-        log.error(f"Failed to log packet to database: {db_error}")
+        log.error("Failed to log packet to database: %s", db_error)
 
     # Log statistics for different message types
     if message_type and processed_successfully:
@@ -909,19 +919,19 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
         elif message_type == "p":
             log.debug("📍 Processed position message")
         else:
-            log.debug(f"📦 Processed message type: {message_type}")
+            log.debug("📦 Processed message type: %s", message_type)
 
 
-def main():
+def main() -> None:
     """Main entry point for the MQTT capture service."""
     log.info("Starting Malla MQTT capture service...")
     log.info("Configuration:")
-    log.info(f"  MQTT Broker: {_cfg.mqtt_broker_address}:{_cfg.mqtt_port}")
-    log.info(f"  MQTT Topic: {_cfg.mqtt_topic}")
+    log.info("  MQTT Broker: %s:%s", _cfg.mqtt_broker_address, _cfg.mqtt_port)
+    log.info("  MQTT Topic: %s", _cfg.mqtt_topic)
     log.info(
-        f"  Database: {_cfg.database_host}:{_cfg.database_port}/{_cfg.database_name}"
+        "  Database: %s:%s/%s", _cfg.database_host, _cfg.database_port, _cfg.database_name
     )
-    log.info(f"  Log Level: {_cfg.log_level}")
+    log.info("  Log Level: %s", _cfg.log_level)
 
     # Create MQTT client
     client = mqtt.Client(protocol=mqtt.MQTTv311)
@@ -947,7 +957,7 @@ def main():
         log.info("Received interrupt signal, shutting down...")
         client.disconnect()
     except Exception as e:
-        log.error(f"MQTT loop error: {e}")
+        log.error("MQTT loop error: %s", e)
         client.disconnect()
 
 

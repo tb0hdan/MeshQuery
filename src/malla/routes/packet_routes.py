@@ -25,7 +25,7 @@ packet_bp = Blueprint("packet", __name__)
 
 def get_packet_details(packet_id: int) -> dict[str, Any] | None:
     """Get comprehensive details for a specific packet including all receptions."""
-    logger.info(f"Getting packet details for packet {packet_id}")
+    logger.info("Getting packet details for packet %s", packet_id)
 
     try:
         db = get_db_adapter()
@@ -47,7 +47,7 @@ def get_packet_details(packet_id: int) -> dict[str, Any] | None:
 
         packet_row = db.fetchone()
         if not packet_row:
-            logger.warning(f"Packet {packet_id} not found")
+            logger.warning("Packet %s not found", packet_id)
             db.close()
             return None
 
@@ -284,7 +284,7 @@ def get_packet_details(packet_id: int) -> dict[str, Any] | None:
                     f"Found location data for {len(gateway_locations)} gateways"
                 )
             except Exception as e:
-                logger.warning(f"Error getting gateway locations: {e}")
+                logger.warning("Error getting gateway locations: %s", e)
 
         # ---------------------------------------------------------------------
         # Build combined traceroute graph across all receptions (including main)
@@ -361,7 +361,7 @@ def get_packet_details(packet_id: int) -> dict[str, Any] | None:
         return result
 
     except Exception as e:
-        logger.error(f"Error getting packet details for packet {packet_id}: {e}")
+        logger.error("Error getting packet details for packet %s: %s", packet_id, e)
         raise
 
 
@@ -719,7 +719,7 @@ def decode_packet_payload(packet: dict[str, Any]) -> dict[str, Any] | None:
         return payload_info
 
     except Exception as e:
-        logger.warning(f"Error decoding payload for packet {packet['id']}: {e}")
+        logger.warning("Error decoding payload for packet %s: %s", packet['id'], e)
         return {
             "portnum": packet["portnum_name"],
             "size": packet["payload_length"],
@@ -1306,7 +1306,7 @@ def get_raw_packet_analysis(packet: dict[str, Any]) -> dict[str, Any] | None:
         return analysis
 
     except Exception as e:
-        logger.warning(f"Error analyzing raw packet for packet {packet['id']}: {e}")
+        logger.warning("Error analyzing raw packet for packet %s: %s", packet['id'], e)
         return {
             "error": str(e),
             "raw_hex": packet["raw_payload"] if packet["raw_payload"] else None,
@@ -1317,7 +1317,7 @@ def get_raw_packet_analysis(packet: dict[str, Any]) -> dict[str, Any] | None:
 @packet_bp.route("/packets")
 def packets() -> str | tuple[str, int]:
     """Packet browser page using modern table interface."""
-    logger.info(f"Packets route accessed with args: {request.args}")
+    logger.info("Packets route accessed with args: %s", request.args)
     try:
         # Create clean filters dict for template (exclude any pagination parameters)
         template_filters = {}
@@ -1332,14 +1332,14 @@ def packets() -> str | tuple[str, int]:
             filters=template_filters,
         )
     except Exception as e:
-        logger.error(f"Error in packets route: {e}")
+        logger.error("Error in packets route: %s", e)
         return f"Packets error: {e}", 500
 
 
 @packet_bp.route("/packet/<int:packet_id>")
 def packet_detail(packet_id: int) -> str | tuple[str, int]:
     """Packet detail page showing comprehensive information about a specific packet."""
-    logger.info(f"Packet detail route accessed for packet {packet_id}")
+    logger.info("Packet detail route accessed for packet %s", packet_id)
     try:
         packet_details = get_packet_details(packet_id)
         if packet_details is None:
@@ -1348,5 +1348,5 @@ def packet_detail(packet_id: int) -> str | tuple[str, int]:
         logger.info("Packet detail page rendered successfully")
         return render_template("packet_detail.html", **packet_details)
     except Exception as e:
-        logger.error(f"Error in packet detail route: {e}")
+        logger.error("Error in packet detail route: %s", e)
         return f"Packet detail error: {e}", 500

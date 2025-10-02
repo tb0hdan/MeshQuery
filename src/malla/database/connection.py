@@ -34,4 +34,4 @@ def init_database() -> None:
     try:
         create_postgres_schema()
     except Exception as e:
-        logger.warning(f"Schema creation failed (may already exist): {e}")
+        logger.warning("Schema creation failed (may already exist): %s", e)

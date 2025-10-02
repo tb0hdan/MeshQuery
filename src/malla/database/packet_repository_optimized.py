@@ -140,7 +140,7 @@ class PacketRepositoryOptimized:
                     LIMIT ?
                 """
 
-                cursor.execute(query, params + [fetch_limit])
+                cursor.execute(query, tuple(params + [fetch_limit]))
                 individual_packets = cursor.fetchall()
 
                 # Group packets in memory by (mesh_packet_id, from_node_id, to_node_id, portnum, portnum_name)
@@ -292,7 +292,7 @@ class PacketRepositoryOptimized:
                 # Original ungrouped behavior
                 # Get total count first
                 count_query = f"SELECT COUNT(*) FROM packet_history {where_clause}"
-                cursor.execute(count_query, params)
+                cursor.execute(count_query, tuple(params))
                 total_count = cursor.fetchone()[0]
 
                 # Main query
@@ -312,7 +312,7 @@ class PacketRepositoryOptimized:
                 """
 
                 query_params = params + [limit, offset]
-                cursor.execute(query, query_params)
+                cursor.execute(query, tuple(query_params))
 
                 packets = []
                 for row in cursor.fetchall():
@@ -348,5 +348,5 @@ class PacketRepositoryOptimized:
             }
 
         except Exception as e:
-            logger.error(f"Error getting packets: {e}")
+            logger.error("Error getting packets: %s", e)
             raise

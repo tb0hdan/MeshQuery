@@ -85,10 +85,10 @@ class MeshtasticService:
             return hardware_models
 
         except ImportError as e:
-            logger.error(f"Failed to import Meshtastic protobuf: {e}")
+            logger.error("Failed to import Meshtastic protobuf: %s", e)
             return []
         except Exception as e:
-            logger.error(f"Error getting hardware models: {e}")
+            logger.error("Error getting hardware models: %s", e)
             return []
 
     @classmethod
@@ -145,10 +145,10 @@ class MeshtasticService:
             return packet_types
 
         except ImportError as e:
-            logger.error(f"Failed to import Meshtastic protobuf: {e}")
+            logger.error("Failed to import Meshtastic protobuf: %s", e)
             return []
         except Exception as e:
-            logger.error(f"Error getting packet types: {e}")
+            logger.error("Error getting packet types: %s", e)
             return []
 
     @classmethod
@@ -193,14 +193,14 @@ class MeshtasticService:
             return roles
 
         except ImportError as e:
-            logger.error(f"Failed to import Meshtastic protobuf: {e}")
+            logger.error("Failed to import Meshtastic protobuf: %s", e)
             return []
         except Exception as e:
-            logger.error(f"Error getting node roles: {e}")
+            logger.error("Error getting node roles: %s", e)
             return []
 
     @classmethod
-    def clear_cache(cls):
+    def clear_cache(cls) -> None:
         """Clear the cached values to force refresh."""
         cls._hardware_models_cache = None
         cls._packet_types_cache = None

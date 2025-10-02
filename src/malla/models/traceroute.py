@@ -437,7 +437,7 @@ class TraceroutePacket:
             total_hops=len(all_hops),
         )
 
-    def _resolve_node_names(self):
+    def _resolve_node_names(self) -> None:
         """Resolve node IDs to names for all paths."""
         if not self.resolve_names:
             return
@@ -521,7 +521,7 @@ class TraceroutePacket:
 
     def calculate_hop_distances(
         self, calculate_for_all_paths: bool = True, location_cache: dict | None = None
-    ):
+    ) -> None:
         """
         Calculate distances for all hops in this traceroute using timestamp-aware location lookups.
 

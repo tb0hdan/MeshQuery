@@ -39,7 +39,7 @@ def parse_traceroute_payload(raw_payload: bytes) -> RouteData:
     if isinstance(raw_payload, memoryview):
         raw_payload = bytes(raw_payload)
 
-    logger.debug(f"Parsing traceroute payload of {len(raw_payload)} bytes")
+    logger.debug("Parsing traceroute payload of %s bytes", len(raw_payload))
 
     if not raw_payload:
         return RouteData(route_nodes=[], snr_towards=[], route_back=[], snr_back=[])
@@ -62,7 +62,7 @@ def parse_traceroute_payload(raw_payload: bytes) -> RouteData:
                 node_id = max(1, min(4294967294, int(node_id)))
                 route_nodes.append(node_id)
             except (ValueError, TypeError) as e:
-                logger.warning(f"Invalid node ID in route: {node_id}, error: {e}")
+                logger.warning("Invalid node ID in route: %s, error: %s", node_id, e)
                 continue
 
         # Safely extract SNR values with validation
@@ -72,7 +72,7 @@ def parse_traceroute_payload(raw_payload: bytes) -> RouteData:
                 snr_val = max(-200, min(200, float(snr) / 4.0))
                 snr_towards.append(snr_val)
             except (ValueError, TypeError) as e:
-                logger.warning(f"Invalid SNR value: {snr}, error: {e}")
+                logger.warning("Invalid SNR value: %s, error: %s", snr, e)
                 continue
 
         # Safely extract route back nodes
@@ -81,7 +81,7 @@ def parse_traceroute_payload(raw_payload: bytes) -> RouteData:
                 node_id = max(1, min(4294967294, int(node_id)))
                 route_back.append(node_id)
             except (ValueError, TypeError) as e:
-                logger.warning(f"Invalid node ID in route_back: {node_id}, error: {e}")
+                logger.warning("Invalid node ID in route_back: %s, error: %s", node_id, e)
                 continue
 
         # Safely extract SNR back values
@@ -90,7 +90,7 @@ def parse_traceroute_payload(raw_payload: bytes) -> RouteData:
                 snr_val = max(-200, min(200, float(snr) / 4.0))
                 snr_back.append(snr_val)
             except (ValueError, TypeError) as e:
-                logger.warning(f"Invalid SNR back value: {snr}, error: {e}")
+                logger.warning("Invalid SNR back value: %s, error: %s", snr, e)
                 continue
 
         result = RouteData(
@@ -107,7 +107,7 @@ def parse_traceroute_payload(raw_payload: bytes) -> RouteData:
         return result
 
     except Exception as e:
-        logger.warning(f"Protobuf parsing failed: {e}")
+        logger.warning("Protobuf parsing failed: %s", e)
         # Return empty result instead of falling back to manual parsing
         return RouteData(route_nodes=[], snr_towards=[], route_back=[], snr_back=[])
 
@@ -188,7 +188,7 @@ def get_node_location_at_timestamp(
                             "age_warning": age_warning,
                         }
                 except Exception as e:
-                    logger.debug(f"Failed to decode position for node {node_id}: {e}")
+                    logger.debug("Failed to decode position for node %s: %s", node_id, e)
                     return None
 
             return None
@@ -198,7 +198,7 @@ def get_node_location_at_timestamp(
             conn.close()
 
     except ImportError as e:
-        logger.error(f"Failed to import database modules: {e}")
+        logger.error("Failed to import database modules: %s", e)
         return None
     except (SystemExit, KeyboardInterrupt) as e:
         # Handle worker shutdown gracefully
@@ -207,5 +207,5 @@ def get_node_location_at_timestamp(
         )
         return None
     except Exception as e:
-        logger.debug(f"Error getting location for node {node_id}: {e}")
+        logger.debug("Error getting location for node %s: %s", node_id, e)
         return None

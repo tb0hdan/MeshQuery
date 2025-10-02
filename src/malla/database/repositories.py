@@ -24,7 +24,7 @@ class DashboardRepository:
     @staticmethod
     def get_stats(gateway_id: str | None = None) -> dict[str, Any]:
         """Get overview statistics for the dashboard using optimized single query."""
-        logger.info(f"Getting dashboard stats with gateway_id={gateway_id}")
+        logger.info("Getting dashboard stats with gateway_id=%s", gateway_id)
 
         try:
             db = get_db_adapter()
@@ -47,7 +47,8 @@ class DashboardRepository:
             total_nodes = node_result["total_nodes"] if node_result else 0
 
             # Single optimized query for all packet statistics
-            params = [one_hour_ago, twenty_four_hours_ago] + gateway_params
+            param_list: list[float | str] = [one_hour_ago, twenty_four_hours_ago] + gateway_params
+            params = tuple(param_list)
 
             placeholder = db.get_placeholder()
             db.execute(
@@ -85,7 +86,7 @@ class DashboardRepository:
             # Get total packet count (all time) separately
             db.execute(
                 f"SELECT COUNT(*) as total FROM packet_history WHERE 1=1{gateway_filter}",
-                gateway_params,
+                tuple(gateway_params),
             )
             total_result = db.fetchone()
             total_packets_all_time = total_result["total"] if total_result else 0
@@ -100,7 +101,7 @@ class DashboardRepository:
                 ORDER BY count DESC
                 LIMIT 10
             """,
-                [twenty_four_hours_ago] + gateway_params,
+                tuple([twenty_four_hours_ago] + gateway_params),
             )
 
             packet_types = db.fetchall() or []
@@ -119,7 +120,7 @@ class DashboardRepository:
             }
 
         except Exception as e:
-            logger.error(f"Error getting dashboard stats: {e}")
+            logger.error("Error getting dashboard stats: %s", e)
             raise
 
 
@@ -297,9 +298,9 @@ class PacketRepository:
                     estimated_individual_needed = (offset + limit) * grouping_ratio
 
                     # Cap at much smaller limits for performance
-                    fetch_limit = min(
+                    fetch_limit = int(min(
                         max(estimated_individual_needed, limit * 5), 10000
-                    )  # Max 10k instead of 1M
+                    ))  # Max 10k instead of 1M
 
                 query = f"""
                     SELECT
@@ -314,7 +315,7 @@ class PacketRepository:
                     LIMIT %s
                 """
 
-                db.execute(query, params + [fetch_limit])
+                db.execute(query, tuple(params + [fetch_limit]))
                 individual_packets = db.fetchall()
 
                 # Group packets in memory by (mesh_packet_id, from_node_id, to_node_id, portnum, portnum_name)
@@ -502,7 +503,7 @@ class PacketRepository:
                 count_query = (
                     f"SELECT COUNT(*) as count FROM packet_history {where_clause}"
                 )
-                db.execute(count_query, params)
+                db.execute(count_query, tuple(params))
                 total_count = db.fetchone()["count"]
 
                 # Main query
@@ -521,7 +522,7 @@ class PacketRepository:
                     LIMIT %s OFFSET %s
                 """
 
-                query_params = params + [limit, offset]
+                query_params = tuple(params + [limit, offset])
                 db.execute(query, query_params)
 
                 packets = []
@@ -597,7 +598,7 @@ class PacketRepository:
             }
 
         except Exception as e:
-            logger.error(f"Error getting packets: {e}")
+            logger.error("Error getting packets: %s", e)
             raise
 
     @staticmethod
@@ -642,14 +643,14 @@ class PacketRepository:
                 LIMIT 1000
             """
 
-            db.execute(query, params)
-            data = [row for row in db.fetchall()]
+            db.execute(query, tuple(params))
+            data = list(db.fetchall())
 
             db.close()
             return data
 
         except Exception as e:
-            logger.error(f"Error getting signal data: {e}")
+            logger.error("Error getting signal data: %s", e)
             raise
 
     @staticmethod
@@ -671,7 +672,7 @@ class PacketRepository:
             return gateways
 
         except Exception as e:
-            logger.error(f"Error getting gateway IDs: {e}")
+            logger.error("Error getting gateway IDs: %s", e)
             raise
 
     @staticmethod
@@ -692,7 +693,7 @@ class PacketRepository:
             return count
 
         except Exception as e:
-            logger.error(f"Error getting gateway count: {e}")
+            logger.error("Error getting gateway count: %s", e)
             raise
 
     @staticmethod
@@ -778,8 +779,8 @@ class PacketRepository:
                 LIMIT 1000
             """
 
-            db.execute(query, params)
-            common_packets = [row for row in db.fetchall()]
+            db.execute(query, tuple(params))
+            common_packets = list(db.fetchall())
 
             # Calculate statistics
             stats = {
@@ -894,7 +895,7 @@ class PacketRepository:
             return {"common_packets": common_packets, "statistics": stats}
 
         except Exception as e:
-            logger.error(f"Error getting gateway comparison data: {e}")
+            logger.error("Error getting gateway comparison data: %s", e)
             raise
 
 
@@ -962,7 +963,7 @@ class NodeRepository:
                 FROM node_info ni
                 {where_clause}
             """
-            db.execute(count_query, params)
+            db.execute(count_query, tuple(params))
             total_count = db.fetchone()["total"]
 
             # Determine sort column mapping
@@ -1076,9 +1077,9 @@ class NodeRepository:
                 """
 
             # Execute query with parameters
-            query_params = params + [limit, offset]
+            query_params = tuple(params + [limit, offset])
             db.execute(query, query_params)
-            nodes = [row for row in db.fetchall()]
+            nodes = list(db.fetchall())
 
             db.close()
 
@@ -1090,7 +1091,7 @@ class NodeRepository:
             }
 
         except Exception as e:
-            logger.error(f"Error getting nodes: {e}")
+            logger.error("Error getting nodes: %s", e)
             raise
 
     @staticmethod
@@ -1753,7 +1754,7 @@ class NodeRepository:
                         "timestamp_relative": format_time_ago(location_timestamp),
                     }
             except Exception as e:
-                logger.warning(f"Failed to get location for node {node_id}: {e}")
+                logger.warning("Failed to get location for node %s: %s", node_id, e)
                 location_info = None
 
             # --------------------------------------------------------------
@@ -1850,7 +1851,7 @@ class NodeRepository:
                 )
 
             # Sort gateways by average hops (ascending, treating None as large), then by average RSSI (descending)
-            def _gateway_sort_key(gw: dict[str, Any]):
+            def _gateway_sort_key(gw: dict[str, Any]) -> tuple[float, float]:
                 hops_sort = gw["avg_hops"] if gw["avg_hops"] is not None else 1e9
                 rssi_sort = (
                     -gw["avg_rssi"] if gw["avg_rssi"] is not None else 1e9
@@ -1870,7 +1871,7 @@ class NodeRepository:
             }
 
         except Exception as e:
-            logger.error(f"Error getting node details for {node_id}: {e}")
+            logger.error("Error getting node details for %s: %s", node_id, e)
             raise
 
     @staticmethod
@@ -1918,7 +1919,7 @@ class NodeRepository:
             return dict(node_row)
 
         except Exception as e:
-            logger.error(f"Error getting basic node info for {node_id}: {e}")
+            logger.error("Error getting basic node info for %s: %s", node_id, e)
             return None
 
     @staticmethod
@@ -1939,7 +1940,7 @@ class NodeRepository:
                 WHERE node_id IN ({placeholders})
             """
 
-            db.execute(query, node_ids)
+            db.execute(query, tuple(node_ids))
             rows = db.fetchall()
 
             # Build result dict with fallback to hex format
@@ -1959,7 +1960,7 @@ class NodeRepository:
             return result
 
         except Exception as e:
-            logger.error(f"Error getting bulk node names: {e}")
+            logger.error("Error getting bulk node names: %s", e)
             raise
 
     @staticmethod
@@ -1984,13 +1985,13 @@ class NodeRepository:
             """
 
             db.execute(query)
-            nodes = [row for row in db.fetchall()]
+            nodes = list(db.fetchall())
 
             db.close()
             return nodes
 
         except Exception as e:
-            logger.error(f"Error getting available from nodes: {e}")
+            logger.error("Error getting available from nodes: %s", e)
             raise
 
     @staticmethod
@@ -2414,7 +2415,7 @@ class NodeRepository:
             db.close()
             return [row[0] for row in rows]
         except Exception as e:
-            logger.debug(f"Error getting unique primary channels: {e}")
+            logger.debug("Error getting unique primary channels: %s", e)
             return []
 
 
@@ -2526,9 +2527,9 @@ class TracerouteRepository:
                     estimated_individual_needed = (offset + limit) * grouping_ratio
 
                     # Cap at much smaller limits for performance
-                    fetch_limit = min(
+                    fetch_limit = int(min(
                         max(estimated_individual_needed, limit * 8), 8000
-                    )  # Max 8k instead of 100k
+                    ))  # Max 8k instead of 100k
 
                 # Fetch individual packets using efficient ORDER BY timestamp DESC LIMIT
                 query = f"""
@@ -2543,9 +2544,9 @@ class TracerouteRepository:
                     LIMIT %s
                 """
 
-                db.execute(query, params + [fetch_limit])
+                db.execute(query, tuple(params + [fetch_limit]))
                 rows = db.fetchall()
-                individual_packets: list[dict[str, Any]] = [row for row in rows]
+                individual_packets: list[dict[str, Any]] = list(rows)
 
                 # Group packets in memory by (mesh_packet_id, from_node_id, to_node_id)
                 groups: dict[tuple[Any, Any, Any], list[dict[str, Any]]] = {}
@@ -2830,7 +2831,7 @@ class TracerouteRepository:
                 # Get total count (before route filtering)
                 db.execute(
                     f"SELECT COUNT(*) as total FROM packet_history {where_clause}",
-                    params,
+                    tuple(params),
                 )
                 total_count_before_filter = db.fetchone()["total"]
 
@@ -2863,7 +2864,7 @@ class TracerouteRepository:
                     LIMIT %s OFFSET %s
                 """
 
-                db.execute(query, params + [fetch_limit, fetch_offset])
+                db.execute(query, tuple(params + [fetch_limit, fetch_offset]))
                 all_packets = []
                 for row in db.fetchall():
                     packet = dict(row)  # Convert to regular dict
@@ -2959,7 +2960,7 @@ class TracerouteRepository:
             }
 
         except Exception as e:
-            logger.error(f"Error getting traceroute packets: {e}")
+            logger.error("Error getting traceroute packets: %s", e)
             raise
 
     @staticmethod
@@ -2995,7 +2996,7 @@ class TracerouteRepository:
             return None
 
         except Exception as e:
-            logger.error(f"Error getting traceroute details: {e}")
+            logger.error("Error getting traceroute details: %s", e)
             raise
 
 
@@ -3023,10 +3024,10 @@ class LocationRepository:
             node_ids_filter = filters.get("node_ids") if filters else None
             node_ids_clause = ""
             node_ids_params: list[Any] = []
-            if node_ids_filter:
+            if node_ids_filter and isinstance(node_ids_filter, (list, tuple)):
                 # Ensure all IDs are ints
                 node_ids_int: list[int] = []
-                for nid in node_ids_filter:
+                for nid in node_ids_filter:  # pylint: disable=not-an-iterable
                     if isinstance(nid, str):
                         if nid.startswith("!"):
                             try:
@@ -3087,10 +3088,10 @@ class LocationRepository:
                     WHERE portnum = 3 AND raw_payload IS NOT NULL
                 """)
             except Exception as e:
-                logger.debug(f"Index creation skipped or failed: {e}")
+                logger.debug("Index creation skipped or failed: %s", e)
 
             query_start = time.time()
-            db.execute(query, node_ids_params)
+            db.execute(query, tuple(node_ids_params))
             raw_rows = db.fetchall()
             timing_breakdown["sql_query"] = time.time() - query_start
 
@@ -3107,10 +3108,10 @@ class LocationRepository:
                         continue
 
                     # Decode position from raw protobuf payload
-                    logger.debug(f"Attempting to parse protobuf for node {row['node_id']}")
+                    logger.debug("Attempting to parse protobuf for node %s", row['node_id'])
                     position = mesh_pb2.Position()
                     position.ParseFromString(row["raw_payload"])
-                    logger.debug(f"Successfully parsed protobuf for node {row['node_id']}")
+                    logger.debug("Successfully parsed protobuf for node %s", row['node_id'])
                     decode_count += 1
 
                     # Extract coordinates (stored as integers, need to divide by 1e7)
@@ -3122,7 +3123,7 @@ class LocationRepository:
                     )
                     altitude = position.altitude if position.altitude else None
 
-                    logger.debug(f"Node {row['node_id']}: lat_i={position.latitude_i}, lng_i={position.longitude_i}, lat={latitude}, lng={longitude}")
+                    logger.debug("Node %s: lat_i=%s, lng_i=%s, lat=%s, lng=%s", row['node_id'], position.latitude_i, position.longitude_i, latitude, longitude)
 
                     # Extract precision and satellite information
                     precision_bits = getattr(position, "precision_bits", None)
@@ -3163,10 +3164,10 @@ class LocationRepository:
                             import math
 
                             lower_bits = max(
-                                [b for b in precision_map.keys() if b < precision_bits]
+                                (b for b in precision_map.keys() if b < precision_bits)
                             )
                             upper_bits = min(
-                                [b for b in precision_map.keys() if b > precision_bits]
+                                (b for b in precision_map.keys() if b > precision_bits)
                             )
 
                             lower_precision = precision_map[lower_bits]
@@ -3189,7 +3190,7 @@ class LocationRepository:
                         or latitude == 0
                         or longitude == 0
                     ):
-                        logger.debug(f"Skipping node {row['node_id']}: lat={latitude}, lng={longitude}")
+                        logger.debug("Skipping node %s: lat=%s, lng=%s", row['node_id'], latitude, longitude)
                         skip_count += 1
                         continue
 
@@ -3224,8 +3225,8 @@ class LocationRepository:
                     logger.warning(
                         f"Failed to parse location for node {row['node_id']}: {e}"
                     )
-                    logger.debug(f"Raw payload length: {len(row['raw_payload']) if row['raw_payload'] else 0}")
-                    logger.debug(f"Raw payload start: {row['raw_payload'][:20] if row['raw_payload'] else 'None'}")
+                    logger.debug("Raw payload length: %s", len(row['raw_payload']) if row['raw_payload'] else 0)
+                    logger.debug("Raw payload start: %s", row['raw_payload'][:50] if row['raw_payload'] else None)
                     skip_count += 1
                     continue
 
@@ -3257,7 +3258,7 @@ class LocationRepository:
             return locations
 
         except Exception as e:
-            logger.error(f"Error getting node locations: {e}")
+            logger.error("Error getting node locations: %s", e)
             raise
 
     @staticmethod
@@ -3335,7 +3336,7 @@ class LocationRepository:
             return locations
 
         except Exception as e:
-            logger.error(f"Error getting node location history: {e}")
+            logger.error("Error getting node location history: %s", e)
             raise
 
     @staticmethod
@@ -3408,7 +3409,7 @@ class LocationRepository:
                 db.close()
                 return None
         except Exception as e:
-            logger.error(f"Error getting latest location for node {node_id}: {e}")
+            logger.error("Error getting latest location for node %s: %s", node_id, e)
             raise
 
     @staticmethod
@@ -3469,7 +3470,7 @@ class LocationRepository:
                             "age_warning": age_warning,
                         }
                 except Exception as e:
-                    logger.warning(f"Failed to decode position from raw payload: {e}")
+                    logger.warning("Failed to decode position from raw payload: %s", e)
 
             # If no location before target, try to get the earliest location after
             query_after = """
@@ -3520,11 +3521,11 @@ class LocationRepository:
                             "age_warning": age_warning,
                         }
                 except Exception as e:
-                    logger.warning(f"Failed to decode position from raw payload: {e}")
+                    logger.warning("Failed to decode position from raw payload: %s", e)
 
             db.close()
             return None
 
         except Exception as e:
-            logger.debug(f"Error getting node location at timestamp: {e}")
+            logger.debug("Error getting node location at timestamp: %s", e)
             raise

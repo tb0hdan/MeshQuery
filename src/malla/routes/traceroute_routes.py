@@ -3,6 +3,7 @@ Traceroute-related routes for the Meshtastic Mesh Health Web UI
 """
 
 import logging
+from typing import Union, Tuple
 
 from flask import Blueprint, render_template, request
 
@@ -13,7 +14,7 @@ traceroute_bp = Blueprint("traceroute", __name__)
 
 
 @traceroute_bp.route("/traceroute")
-def traceroute():
+def traceroute() -> Union[str, Tuple[str, int]]:
     """Traceroute analysis page using modern table interface."""
     logger.info("Traceroute route accessed")
     try:
@@ -42,23 +43,23 @@ def traceroute():
 
         return render_template("traceroute.html", defer_initial_load=has_filters)
     except Exception as e:
-        logger.error(f"Error in traceroute route: {e}")
+        logger.error("Error in traceroute route: %s", e)
         return f"Traceroute error: {e}", 500
 
 
 @traceroute_bp.route("/traceroute-hops")
-def traceroute_hops():
+def traceroute_hops() -> Union[str, Tuple[str, int]]:
     """Traceroute hops visualization page."""
     logger.info("Traceroute hops route accessed")
     try:
         return render_template("traceroute_hops.html")
     except Exception as e:
-        logger.error(f"Error in traceroute hops route: {e}")
+        logger.error("Error in traceroute hops route: %s", e)
         return f"Traceroute hops error: {e}", 500
 
 
 @traceroute_bp.route("/traceroute-graph")
-def traceroute_graph():
+def traceroute_graph() -> Union[str, Tuple[str, int]]:
     """Traceroute network graph visualization page."""
     logger.info("Traceroute graph route accessed")
     try:
@@ -81,5 +82,5 @@ def traceroute_graph():
             include_indirect=include_indirect,
         )
     except Exception as e:
-        logger.error(f"Error in traceroute graph route: {e}")
+        logger.error("Error in traceroute graph route: %s", e)
         return f"Traceroute graph error: {e}", 500

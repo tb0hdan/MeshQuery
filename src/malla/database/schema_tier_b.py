@@ -2,8 +2,11 @@
 Tier B Write-Optimized Pipeline Database Schema
 """
 
+import psycopg2
+from psycopg2.extras import RealDictCursor
 
-def _ensure_longest_links_materialized_views(conn, cursor):
+
+def _ensure_longest_links_materialized_views(conn: psycopg2.extensions.connection, cursor: RealDictCursor) -> None:
     """Create materialized views for longest RF distances (single-hop and multi-hop). Idempotent."""
     # Create single-hop MV if missing
     cursor.execute("""
@@ -130,7 +133,7 @@ def create_tier_b_schema() -> None:
             try:
                 cursor.execute(index_sql)
             except Exception as e:
-                logger.warning(f"Could not create index: {e}")
+                logger.warning("Could not create index: %s", e)
 
         # Drop materialized view if it exists to ensure we can create it with a unique index
         cursor.execute("DROP MATERIALIZED VIEW IF EXISTS longest_links_mv")
@@ -173,7 +176,7 @@ def create_tier_b_schema() -> None:
         logger.info("Tier B write-optimized schema created successfully")
 
     except Exception as e:
-        logger.error(f"Failed to create Tier B schema: {e}")
+        logger.error("Failed to create Tier B schema: %s", e)
         raise
 
 
@@ -199,7 +202,7 @@ def refresh_longest_links_mv() -> None:
         logger.info("longest_links_mv materialized view refreshed successfully")
 
     except Exception as e:
-        logger.error(f"Failed to refresh longest_links_mv: {e}")
+        logger.error("Failed to refresh longest_links_mv: %s", e)
         # Don't raise - this is a background operation
 
 
@@ -225,21 +228,21 @@ def refresh_longest_links_materialized_views() -> None:
             )
             logger.info("longest_singlehop_mv refreshed successfully")
         except Exception as e:
-            logger.warning(f"Could not refresh longest_singlehop_mv: {e}")
+            logger.warning("Could not refresh longest_singlehop_mv: %s", e)
 
         # Refresh multi-hop view
         try:
             cursor.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY longest_multihop_mv")
             logger.info("longest_multihop_mv refreshed successfully")
         except Exception as e:
-            logger.warning(f"Could not refresh longest_multihop_mv: {e}")
+            logger.warning("Could not refresh longest_multihop_mv: %s", e)
 
         # Refresh general longest links view
         try:
             cursor.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY longest_links_mv")
             logger.info("longest_links_mv refreshed successfully")
         except Exception as e:
-            logger.warning(f"Could not refresh longest_links_mv: {e}")
+            logger.warning("Could not refresh longest_links_mv: %s", e)
 
         conn.commit()
         conn.close()
@@ -247,7 +250,7 @@ def refresh_longest_links_materialized_views() -> None:
         logger.info("All longest links materialized views refreshed successfully")
 
     except Exception as e:
-        logger.error(f"Failed to refresh longest links materialized views: {e}")
+        logger.error("Failed to refresh longest links materialized views: %s", e)
         # Don't raise - this is a background operation
 
 
@@ -434,7 +437,7 @@ def get_longest_links_optimized(
         return links
 
     except Exception as e:
-        logger.error(f"Error in optimized longest links query: {e}")
+        logger.error("Error in optimized longest links query: %s", e)
         return []
 
 
@@ -479,8 +482,8 @@ def insert_traceroute_hops(packet_id: int, hops_data: list[dict[str, Any]]) -> N
         conn.commit()
         conn.close()
 
-        logger.debug(f"Inserted {len(insert_data)} hops for packet {packet_id}")
+        logger.debug("Inserted %s hops for packet %s", len(insert_data), packet_id)
 
     except Exception as e:
-        logger.error(f"Failed to insert traceroute hops for packet {packet_id}: {e}")
+        logger.error("Failed to insert traceroute hops for packet %s: %s", packet_id, e)
         raise

@@ -8,6 +8,9 @@ that starts Gunicorn with appropriate configuration for production deployment.
 
 import logging
 import sys
+from typing import Optional, Any, Iterable
+
+from flask import Flask
 
 from .config import get_config
 from .web_ui import create_app
@@ -22,7 +25,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def create_wsgi_app():
+def create_wsgi_app() -> Flask:
     """Create and return the WSGI application."""
     logger.info("Creating WSGI application for Gunicorn")
     return create_app()
@@ -32,7 +35,7 @@ def create_wsgi_app():
 _application = None
 
 
-def get_application():
+def get_application() -> Flask:
     """Get the WSGI application instance, creating it if necessary."""
     global _application
     if _application is None:
@@ -41,12 +44,12 @@ def get_application():
 
 
 # WSGI application callable for servers - use a callable that defers execution
-def application(*args, **kwargs):
+def application(environ: dict[str, Any], start_response: Any) -> Iterable[bytes]:
     """WSGI application entry point."""
-    return get_application()(*args, **kwargs)
+    return get_application()(environ, start_response)
 
 
-def main():
+def main() -> None:
     """Main entry point for running with Gunicorn."""
     logger.info("Starting Malla Web UI with Gunicorn")
 
@@ -56,6 +59,12 @@ def main():
 
         # Get configuration
         cfg = get_config()
+
+        # Configure Gunicorn with improved settings
+        import multiprocessing
+
+        # Calculate optimal worker count (CPU cores * 2 + 1, but cap at 8)
+        worker_count = min(multiprocessing.cpu_count() * 2 + 1, 8)
 
         # Print startup information
         print("=" * 60)
@@ -67,12 +76,6 @@ def main():
         print(f"Debug mode: {cfg.debug}")
         print("=" * 60)
         print()
-
-        # Configure Gunicorn with improved settings
-        import multiprocessing
-        
-        # Calculate optimal worker count (CPU cores * 2 + 1, but cap at 8)
-        worker_count = min(multiprocessing.cpu_count() * 2 + 1, 8)
         
         gunicorn_config = {
             "bind": f"{cfg.host}:{cfg.port}",
@@ -98,12 +101,12 @@ def main():
 
         # Create Gunicorn application
         class MallaWSGIApplication(WSGIApplication):
-            def __init__(self, app, options=None):
+            def __init__(self, app: Flask, options: Optional[dict[str, Any]] = None) -> None:
                 self.options = options or {}
                 self.application = app
                 super().__init__()
 
-            def load_config(self):
+            def load_config(self) -> None:
                 if hasattr(self, "cfg") and self.cfg:
                     config = {
                         key: value
@@ -113,11 +116,11 @@ def main():
                     for key, value in config.items():
                         self.cfg.set(key.lower(), value)
 
-            def load(self):
+            def load(self) -> Flask:
                 return self.application
 
         # Start Gunicorn
-        logger.info(f"Starting Gunicorn server on {cfg.host}:{cfg.port}")
+        logger.info("Starting Gunicorn server on %s:%s", cfg.host, cfg.port)
         MallaWSGIApplication(get_application(), gunicorn_config).run()
 
     except ImportError:
@@ -126,7 +129,7 @@ def main():
         )
         sys.exit(1)
     except Exception as e:
-        logger.error(f"Failed to start Gunicorn application: {e}")
+        logger.error("Failed to start Gunicorn application: %s", e)
         sys.exit(1)
 
 

@@ -8,6 +8,7 @@ This module initializes the Tier B write-optimized pipeline by:
 """
 
 import logging
+from typing import Any
 
 from ..database.schema_tier_b import create_tier_b_schema, refresh_longest_links_mv
 from .materialized_view_refresher import (
@@ -57,7 +58,7 @@ def initialize_tier_b_pipeline(refresh_interval_minutes: int = 5) -> bool:
         return True
 
     except Exception as e:
-        logger.error(f"Failed to initialize Tier B pipeline: {e}")
+        logger.error("Failed to initialize Tier B pipeline: %s", e)
         return False
 
 
@@ -73,10 +74,10 @@ def shutdown_tier_b_pipeline() -> None:
         stop_materialized_view_refresher()
         logger.info("Tier B pipeline shutdown completed")
     except Exception as e:
-        logger.error(f"Error during Tier B pipeline shutdown: {e}")
+        logger.error("Error during Tier B pipeline shutdown: %s", e)
 
 
-def get_pipeline_status() -> dict[str, any]:
+def get_pipeline_status() -> dict[str, Any]:
     """
     Get the current status of the Tier B pipeline.
 
@@ -110,5 +111,5 @@ def force_refresh_materialized_view() -> bool:
         logger.info("Forced refresh of materialized view completed")
         return True
     except Exception as e:
-        logger.error(f"Failed to force refresh materialized view: {e}")
+        logger.error("Failed to force refresh materialized view: %s", e)
         return False

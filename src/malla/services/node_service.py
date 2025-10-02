@@ -25,7 +25,7 @@ class NodeService:
     """Service class for node-related business operations."""
 
     @staticmethod
-    def get_node_info(node_id) -> dict[str, Any]:
+    def get_node_info(node_id: str) -> dict[str, Any]:
         """
         Get detailed information about a specific node.
 
@@ -73,7 +73,7 @@ class NodeService:
         }
 
     @staticmethod
-    def get_node_location_history(node_id, limit: int = 100) -> dict[str, Any]:
+    def get_node_location_history(node_id: str, limit: int = 100) -> dict[str, Any]:
         """
         Get location history for a specific node.
 
@@ -90,7 +90,7 @@ class NodeService:
         return {"node_id": node_id_int, "location_history": history}
 
     @staticmethod
-    def get_node_neighbors(node_id, max_distance: float = 10.0) -> dict[str, Any]:
+    def get_node_neighbors(node_id: str, max_distance: float = 10.0) -> dict[str, Any]:
         """
         Get neighbors for a specific node within a certain distance.
 
@@ -114,7 +114,7 @@ class NodeService:
         }
 
     @staticmethod
-    def get_traceroute_related_nodes(node_id) -> dict[str, Any]:
+    def get_traceroute_related_nodes(node_id: str) -> dict[str, Any]:
         """
         Get nodes that have DIRECT RF hop connections to the specified node.
 
@@ -209,7 +209,7 @@ class NodeService:
                         related_nodes[other_node] += 1
 
             except Exception as e:
-                logger.warning(f"Failed to analyze RF hops for packet {packet_id}: {e}")
+                logger.warning("Failed to analyze RF hops for packet %s: %s", packet_id, e)
                 continue
 
         # Get node info for all related nodes
