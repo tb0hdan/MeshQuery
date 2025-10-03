@@ -50,6 +50,8 @@ dependencies = [
     "mypy==1.18.2",
     "pylint==3.3.8",
     "types-Markdown==3.9.0.20250906",
+    "pytest==8.4.2",
+    "pytest-cov==7.0.0",
 ]
 
 [project.urls]
