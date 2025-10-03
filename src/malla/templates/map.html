@@ -199,6 +199,88 @@
     display: none !important;
 }
 
+/* Enhanced animations for packet transmission/reception */
+@keyframes pulseGreen {
+    0% {
+        box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.9);
+        transform: scale(1);
+    }
+    50% {
+        box-shadow: 0 0 30px 15px rgba(76, 175, 80, 0.6);
+        transform: scale(1.15);
+    }
+    100% {
+        box-shadow: 0 0 60px 30px rgba(76, 175, 80, 0);
+        transform: scale(1);
+    }
+}
+
+@keyframes pulseRed {
+    0% {
+        box-shadow: 0 0 0 0 rgba(244, 67, 54, 0.9);
+        transform: scale(1);
+    }
+    50% {
+        box-shadow: 0 0 30px 15px rgba(244, 67, 54, 0.6);
+        transform: scale(1.15);
+    }
+    100% {
+        box-shadow: 0 0 60px 30px rgba(244, 67, 54, 0);
+        transform: scale(1);
+    }
+}
+
+@keyframes rippleGreen {
+    0% {
+        box-shadow: 0 0 0 0 rgba(76, 175, 80, 1),
+                    0 0 0 0 rgba(76, 175, 80, 0.7),
+                    0 0 0 0 rgba(76, 175, 80, 0.5);
+    }
+    100% {
+        box-shadow: 0 0 0 20px rgba(76, 175, 80, 0),
+                    0 0 0 40px rgba(76, 175, 80, 0),
+                    0 0 0 60px rgba(76, 175, 80, 0);
+    }
+}
+
+@keyframes rippleRed {
+    0% {
+        box-shadow: 0 0 0 0 rgba(244, 67, 54, 1),
+                    0 0 0 0 rgba(244, 67, 54, 0.7),
+                    0 0 0 0 rgba(244, 67, 54, 0.5);
+    }
+    100% {
+        box-shadow: 0 0 0 20px rgba(244, 67, 54, 0),
+                    0 0 0 40px rgba(244, 67, 54, 0),
+                    0 0 0 60px rgba(244, 67, 54, 0);
+    }
+}
+
+/* Classes for animated markers */
+.transmitting-marker {
+    animation: pulseGreen 1.2s ease-out !important;
+    z-index: 10000 !important;
+    position: relative !important;
+}
+
+.receiving-marker {
+    animation: pulseRed 1.2s ease-out !important;
+    z-index: 10000 !important;
+    position: relative !important;
+}
+
+.transmitting-cluster {
+    animation: rippleGreen 1.2s ease-out !important;
+    z-index: 10000 !important;
+    position: relative !important;
+}
+
+.receiving-cluster {
+    animation: rippleRed 1.2s ease-out !important;
+    z-index: 10000 !important;
+    position: relative !important;
+}
+
 .map-container {
     position: fixed;
     top: 56px; /* Height of navbar */
@@ -529,11 +611,12 @@ let currentHopDepth = 1; // max hop depth to display around selected node
 let nodeMarkerMap = {};
 
 // Define a maximum realistic RF link distance (in kilometers).  Links
-// exceeding this threshold will be ignored when rendering.  Meshtastic
+// exceeding this threshold will be ignored when rendering UNLESS they have
+// valid SNR/RSSI values indicating a real RF connection. Meshtastic
 // devices are not expected to maintain links over extreme distances such
 // as 1000km; filtering out long links avoids misleading visuals when
 // packets traverse via MQTT or misconfigured nodes.
-const MAX_LINK_DISTANCE_KM = 200;
+const MAX_LINK_DISTANCE_KM = 150;
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', function() {
@@ -1863,9 +1946,25 @@ async function refreshMapData() {
         const combinedLinks = [...tracerouteLinksFetched, ...packetLinksFetched];
         allLinkData = combinedLinks.filter(l => {
             // If no distance is known, keep the link (to avoid hiding valid
-            // connections where GPS data is missing).  Otherwise enforce the
-            // maximum distance threshold.
-            return l.distance_km === undefined || l.distance_km === null || l.distance_km <= MAX_LINK_DISTANCE_KM;
+            // connections where GPS data is missing)
+            if (l.distance_km === undefined || l.distance_km === null) {
+                return true;
+            }
+
+            // If distance is within normal range, keep it
+            if (l.distance_km <= MAX_LINK_DISTANCE_KM) {
+                return true;
+            }
+
+            // For links beyond max distance, check if they have valid SNR/RSSI values
+            // indicating a real RF connection (not MQTT)
+            const hasValidSNR = l.avg_snr !== null && l.avg_snr !== undefined &&
+                               l.avg_snr > -20 && l.avg_snr < 20;  // Reasonable SNR range
+            const hasValidRSSI = l.avg_rssi !== null && l.avg_rssi !== undefined &&
+                                l.avg_rssi > -140 && l.avg_rssi < 0;  // Reasonable RSSI range
+
+            // Keep the link if it has valid signal measurements, even if distance is large
+            return hasValidSNR && hasValidRSSI;
         });
 
         // Apply filters and update display
@@ -1922,6 +2021,7 @@ function flashNode(nodeId, color) {
     }
     // Determine the element to highlight: either the marker itself or its cluster
     let element = null;
+    let isCluster = false;
     try {
         // Retrieve visible parent of the marker; if the marker is clustered,
         // this will return the cluster icon instead of the marker.  Otherwise
@@ -1930,6 +2030,7 @@ function flashNode(nodeId, color) {
         if (parent && typeof parent.getChildCount === 'function' && parent.getChildCount() > 1) {
             // It's a cluster; highlight the cluster icon
             element = parent._icon;
+            isCluster = true;
         } else {
             // Use the marker's DOM element
             element = marker.getElement();
@@ -1939,21 +2040,27 @@ function flashNode(nodeId, color) {
         element = marker.getElement();
     }
     if (!element) return;
-    // Choose highlight color; default to green
-    let highlightColor;
-    if (color === 'red') {
-        highlightColor = 'rgba(220,53,69,0.7)'; // Bootstrap danger red
+
+    // Remove any existing animation classes
+    element.classList.remove('transmitting-marker', 'receiving-marker', 'transmitting-cluster', 'receiving-cluster');
+
+    // Force reflow to restart animation
+    void element.offsetWidth;
+
+    // Apply appropriate animation class based on color and element type
+    let animationClass;
+    if (isCluster) {
+        animationClass = color === 'red' ? 'receiving-cluster' : 'transmitting-cluster';
     } else {
-        highlightColor = 'rgba(25,135,84,0.7)'; // Bootstrap success green
+        animationClass = color === 'red' ? 'receiving-marker' : 'transmitting-marker';
     }
-    // Store original box-shadow to restore later
-    const originalBoxShadow = element.style.boxShadow;
-    // Apply highlight box shadow
-    element.style.boxShadow = `0 0 15px 5px ${highlightColor}`;
-    // Remove highlight after a short delay
+
+    element.classList.add(animationClass);
+
+    // Remove animation class after animation completes
     setTimeout(() => {
-        element.style.boxShadow = originalBoxShadow || '';
-    }, 700);
+        element.classList.remove(animationClass);
+    }, 1200);
 }
 
 /**

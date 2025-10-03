@@ -93,7 +93,13 @@ class GatewayService:
             )
 
             gateway_distribution = []
-            for row in db.fetchall():
+            gateway_rows = db.fetchall()
+
+            # Calculate total packet count for percentage calculation
+            total_packets = sum(row["packet_count"] for row in gateway_rows)
+
+            for row in gateway_rows:
+                percentage_of_total = (row["packet_count"] / total_packets * 100) if total_packets > 0 else 0
                 gateway_distribution.append(
                     {
                         "gateway_id": row["gateway_id"],
@@ -107,6 +113,7 @@ class GatewayService:
                         "last_seen_str": datetime.fromtimestamp(
                             row["last_seen"]
                         ).strftime("%Y-%m-%d %H:%M:%S"),
+                        "percentage_of_total": round(percentage_of_total, 1),
                     }
                 )
 
@@ -125,13 +132,22 @@ class GatewayService:
             nodes_with_gateways = result["nodes_with_gateways"] if result else 0
 
             # Calculate gateway diversity score (0-100)
-            # Based on total gateways and distribution
-            if total_gateways == 0:
+            # Based on distribution evenness - more even = higher score
+            if total_gateways == 0 or total_packets == 0:
                 diversity_score = 0
-            elif total_gateways >= 10:
-                diversity_score = 100
             else:
-                diversity_score = min(100, total_gateways * 10)
+                # Simple standard deviation approach
+                packets_per_gateway = [gw["packet_count"] for gw in gateway_distribution]
+                mean_packets = total_packets / len(packets_per_gateway)
+
+                # Calculate coefficient of variation (std dev / mean)
+                variance = sum((count - mean_packets) ** 2 for count in packets_per_gateway) / len(packets_per_gateway)
+                std_dev = variance ** 0.5
+                cv = std_dev / mean_packets if mean_packets > 0 else 0
+
+                # Convert to diversity score: lower CV = higher diversity
+                # Scale CV to 0-100 (assume CV of 1.0 = 0 diversity)
+                diversity_score = max(0, min(100, int((1 - min(cv, 1.0)) * 100)))
 
             db.close()
 

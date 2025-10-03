@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-bs-theme="dark">
+<html lang="en" data-bs-theme="">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -456,35 +456,65 @@
 
     <!-- Theme toggle functionality -->
     <script>
+        // Initialize theme immediately to prevent flash
+        (function() {
+            // Detect system preference
+            const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+            // Load saved theme preference or use system preference
+            const savedTheme = localStorage.getItem('theme');
+            const theme = savedTheme || (prefersDark ? 'dark' : 'light');
+
+            document.documentElement.setAttribute('data-bs-theme', theme);
+        })();
+
         // Theme toggle functionality
         document.addEventListener('DOMContentLoaded', function() {
             const themeToggle = document.getElementById('themeToggle');
             const themeIcon = document.getElementById('themeIcon');
             const html = document.documentElement;
 
-            // Load saved theme preference or default to dark
-            const savedTheme = localStorage.getItem('theme') || 'dark';
-            html.setAttribute('data-bs-theme', savedTheme);
-            updateThemeIcon(savedTheme);
+            // Get current theme
+            const currentTheme = html.getAttribute('data-bs-theme');
+            updateThemeIcon(currentTheme);
 
             // Theme toggle click handler
-            themeToggle.addEventListener('click', function() {
-                const currentTheme = html.getAttribute('data-bs-theme');
-                const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            if (themeToggle) {
+                themeToggle.addEventListener('click', function() {
+                    const currentTheme = html.getAttribute('data-bs-theme');
+                    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
 
-                html.setAttribute('data-bs-theme', newTheme);
-                localStorage.setItem('theme', newTheme);
-                updateThemeIcon(newTheme);
-            });
+                    html.setAttribute('data-bs-theme', newTheme);
+                    localStorage.setItem('theme', newTheme);
+                    updateThemeIcon(newTheme);
+
+                    // Trigger a custom event for pages that need to respond to theme changes
+                    window.dispatchEvent(new CustomEvent('themeChanged', { detail: { theme: newTheme } }));
+                });
+            }
 
             function updateThemeIcon(theme) {
+                if (!themeIcon) return;
+
                 if (theme === 'dark') {
                     themeIcon.className = 'bi bi-moon-fill';
-                    themeToggle.title = 'Switch to light mode';
+                    if (themeToggle) themeToggle.title = 'Switch to light mode';
                 } else {
                     themeIcon.className = 'bi bi-sun-fill';
-                    themeToggle.title = 'Switch to dark mode';
+                    if (themeToggle) themeToggle.title = 'Switch to dark mode';
                 }
+            }
+
+            // Listen for system theme changes
+            if (window.matchMedia) {
+                window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function(e) {
+                    // Only auto-switch if user hasn't manually set a preference
+                    if (!localStorage.getItem('theme')) {
+                        const newTheme = e.matches ? 'dark' : 'light';
+                        html.setAttribute('data-bs-theme', newTheme);
+                        updateThemeIcon(newTheme);
+                        window.dispatchEvent(new CustomEvent('themeChanged', { detail: { theme: newTheme } }));
+                    }
+                });
             }
         });
     </script>

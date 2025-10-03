@@ -6,6 +6,80 @@
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/modern-table.css') }}">
 {{ table_layout_styles() }}
+<style>
+    /* Items per page selector styling */
+    .page-size-selector {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .page-size-selector label {
+        margin: 0;
+        font-size: 0.875rem;
+    }
+
+    .page-size-selector select {
+        width: auto;
+        min-width: 80px;
+    }
+
+    /* Enhanced pagination styling */
+    .modern-pagination {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1rem;
+        border-top: 1px solid #dee2e6;
+        background: #f8f9fa;
+    }
+
+    .pagination-controls {
+        display: flex;
+        gap: 0.25rem;
+        align-items: center;
+    }
+
+    .pagination-btn {
+        padding: 0.375rem 0.75rem;
+        border: 1px solid #dee2e6;
+        background: white;
+        color: #495057;
+        border-radius: 0.25rem;
+        font-size: 0.875rem;
+        cursor: pointer;
+        transition: all 0.15s ease;
+    }
+
+    .pagination-btn:hover:not(:disabled) {
+        background: #e9ecef;
+        border-color: #adb5bd;
+    }
+
+    .pagination-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .pagination-btn.active {
+        background: #0d6efd;
+        color: white;
+        border-color: #0d6efd;
+    }
+
+    .pagination-info {
+        font-size: 0.875rem;
+        color: #6c757d;
+    }
+
+    /* Items per page in pagination area */
+    .items-per-page-control {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.875rem;
+    }
+</style>
 {% endblock %}
 
 {% block content %}
@@ -48,89 +122,50 @@
             </div>
             <div class="col-12">
                 <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="active_only" name="active_only" value="1">
+                    <input class="form-check-input" type="checkbox" id="active_only" name="active_only">
                     <label class="form-check-label" for="active_only">
-                        <i class="bi bi-activity"></i> Active nodes only (24h)
+                        Active nodes only (24h)
                     </label>
                 </div>
             </div>
             <div class="col-12">
                 <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="named_only" name="named_only" value="1">
+                    <input class="form-check-input" type="checkbox" id="named_only" name="named_only">
                     <label class="form-check-label" for="named_only">
-                        <i class="bi bi-tag"></i> Named nodes only
+                        Named nodes only
                     </label>
                 </div>
             </div>
         </div>
     {% endcall %}
 
-    {% set table_controls = [
-        {"class": "btn-primary", "id": "applyFilters", "icon": "bi bi-search", "text": "Apply Filters", "type": "button"},
-        {"class": "btn-outline-secondary", "id": "clearFilters", "icon": "bi bi-x-circle", "text": "Clear Filters", "type": "button"},
-        {"class": "btn-outline-info", "id": "refreshTable", "icon": "bi bi-arrow-clockwise", "text": "Refresh", "type": "button"},
-        {"class": "btn-outline-success", "id": "shareFilters", "icon": "bi bi-share", "text": "Share", "type": "button"}
-    ] %}
-    {{ table_controls_section(table_controls) }}
-
-    <!-- Legend Section -->
-    <div class="sidebar-section">
-        <h6><i class="bi bi-palette"></i> Legend</h6>
-        <div class="legend-content">
-            <div class="legend-item">
-                <span class="badge bg-primary me-2">Client</span>
-                <span class="badge bg-success me-2">Router</span>
-                <span class="badge bg-success me-2">Router Late</span>
-                <span class="badge bg-warning me-2">Repeater</span>
-            </div>
-            <div class="legend-item mt-2">
-                <span class="text-success me-2">Active (24h activity)</span>
-                <span class="text-muted me-2">Inactive (no recent activity)</span>
-            </div>
-        </div>
-    </div>
+    {% call table_controls_section() %}
+        <button class="btn btn-primary btn-sm w-100" id="applyFilters">
+            <i class="bi bi-funnel"></i> Apply Filters
+        </button>
+        <button class="btn btn-secondary btn-sm w-100 mt-2" id="clearFilters">
+            <i class="bi bi-x-circle"></i> Clear Filters
+        </button>
+        <button class="btn btn-outline-primary btn-sm w-100 mt-2" id="refreshTable">
+            <i class="bi bi-arrow-clockwise"></i> Refresh
+        </button>
+    {% endcall %}
 </div>
+
+<!-- Re-open the container div that we closed at the beginning -->
+<div class="container-fluid">
 {% endblock %}
 
 {% block extra_js %}
-<script src="{{ url_for('static', filename='js/filter-store.js') }}"></script>
-<script src="{{ url_for('static', filename='js/table-filter-controller.js') }}"></script>
 <script src="{{ url_for('static', filename='js/modern-table.js') }}"></script>
+<script src="{{ url_for('static', filename='js/url-manager.js') }}"></script>
+<script src="{{ url_for('static', filename='js/table-filter-controller.js') }}"></script>
+<script src="{{ url_for('static', filename='js/sidebar.js') }}"></script>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Move sidebar content into the actual sidebar FIRST
-    const sidebarContent = document.getElementById('sidebarContent');
-    const sidebarContainer = document.querySelector('.sidebar-content');
-    if (sidebarContent && sidebarContainer) {
-        sidebarContainer.innerHTML = sidebarContent.innerHTML;
-        sidebarContent.remove();
-    }
-
-    // Initialize URL filter manager AFTER sidebar content is moved
-    const urlManager = new URLFilterManager();
-
-    // Load hardware models and roles dynamically
-    loadHardwareModels();
-    loadNodeRoles();
-    loadPrimaryChannels();
-
-    // Initialize sidebar toggle functionality
-    const toggleBtn = document.getElementById('toggleSidebar');
-    const closeBtn = document.getElementById('closeSidebar');
-    const sidebar = document.querySelector('.table-sidebar');
-
-    function toggleSidebar() {
-        sidebar.classList.toggle('collapsed');
-        const icon = toggleBtn.querySelector('i');
-        if (sidebar.classList.contains('collapsed')) {
-            icon.className = 'bi bi-layout-sidebar-inset';
-        } else {
-            icon.className = 'bi bi-layout-sidebar-inset-reverse';
-        }
-    }
-
-    toggleBtn.addEventListener('click', toggleSidebar);
-    closeBtn.addEventListener('click', toggleSidebar);
+    // Initialize URL manager
+    const urlManager = new URLManager();
 
     // Load hardware models from API
     async function loadHardwareModels() {
@@ -140,16 +175,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
             if (data.hardware_models) {
                 const select = document.getElementById('hw_model');
-                // Keep the "All Hardware" option
-                const allOption = select.querySelector('option[value=""]');
-                select.innerHTML = '';
-                select.appendChild(allOption);
+                // Clear existing options except the first one
+                select.innerHTML = '<option value="">All Hardware</option>';
 
-                // Add hardware model options
-                data.hardware_models.forEach(([value, displayName]) => {
+                data.hardware_models.forEach(model => {
                     const option = document.createElement('option');
-                    option.value = value;
-                    option.textContent = displayName;
+                    option.value = model;
+                    option.textContent = model;
                     select.appendChild(option);
                 });
             }
@@ -166,16 +198,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
             if (data.node_roles) {
                 const select = document.getElementById('role');
-                // Keep the "All Roles" option
-                const allOption = select.querySelector('option[value=""]');
-                select.innerHTML = '';
-                select.appendChild(allOption);
+                // Clear existing options except the first one
+                select.innerHTML = '<option value="">All Roles</option>';
 
-                // Add role options
-                data.node_roles.forEach(([value, displayName]) => {
+                data.node_roles.forEach(role => {
                     const option = document.createElement('option');
-                    option.value = value;
-                    option.textContent = displayName;
+                    option.value = role;
+                    option.textContent = role;
                     select.appendChild(option);
                 });
             }
@@ -192,63 +221,24 @@ document.addEventListener('DOMContentLoaded', function() {
 
             if (data.channels) {
                 const select = document.getElementById('primary_channel');
-                const allOption = select.querySelector('option[value=""]');
-                select.innerHTML = '';
-                select.appendChild(allOption);
+                // Clear existing options except the first one
+                select.innerHTML = '<option value="">All Channels</option>';
 
-                data.channels.forEach((ch) => {
+                data.channels.forEach(channel => {
                     const option = document.createElement('option');
-                    option.value = ch;
-                    option.textContent = ch;
+                    option.value = channel;
+                    option.textContent = `Channel ${channel}`;
                     select.appendChild(option);
                 });
             }
         } catch (error) {
-            console.error('Error loading channels:', error);
+            console.error('Error loading primary channels:', error);
         }
     }
 
-    // ------------------------------------------------------------------
-    // Fetch ALL node data once and keep it client-side for filtering
-    // ------------------------------------------------------------------
-    let allNodeData = [];
-
-    async function fetchAllNodes() {
-        try {
-            // Fetch up to 10k nodes in a single request – more than enough for typical deployments
-            const response = await fetch('/api/nodes/data?limit=10000&page=1');
-            const json = await response.json();
-            // The endpoint returns an object with a "data" property
-            allNodeData = json.data || [];
-        } catch (err) {
-            console.error('Error fetching all node data:', err);
-            allNodeData = [];
-        }
-    }
-
-    // Initialize page with filters and load data
-    async function initializePageWithFilters() {
-        // Apply URL parameters
-        const hasParams = await urlManager.applyURLParameters();
-
-        // Initialize the filter controller (after data + UI ready)
-        controller.initialLoad(hasParams);
-    }
-
-    // Load supporting data (hardware models, roles) AND all nodes, then start
-    Promise.all([loadHardwareModels(), loadNodeRoles(), loadPrimaryChannels(), fetchAllNodes()]).then(async () => {
-        initializePageWithFilters();
-    });
-
-    // Initialize the modern table
-    const table = new ModernTable('nodesTable', {
-        endpoint: '/api/nodes/data',
-        enableSearch: false,
-        enablePagination: false,
-        pageSize: 25,
-        deferInitialLoad: true,
-        defaultSort: { column: 'last_packet_str', direction: 'desc' },
-        columns: [
+    // Get dynamic columns configuration
+    function getDynamicColumns() {
+        return [
             {
                 key: 'hex_id',
                 title: 'Node ID',
@@ -260,45 +250,46 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             },
             {
-                key: 'node_name',
+                key: 'long_name',
                 title: 'Name',
                 sortable: true,
                 render: (value, row) => {
-                    const displayName = value || 'Unnamed';
-                    return `<a href="/node/${row.node_id}" class="text-decoration-none" title="View node details">
-                                ${displayName}
-                            </a>`;
+                    const displayName = value || row.short_name || 'Unknown';
+                    return `<div>${displayName}</div>`;
                 }
             },
             {
                 key: 'hw_model',
                 title: 'Hardware',
                 sortable: true,
-                render: (value, row) => {
-                    if (value && value !== 'Unknown') {
-                        return `<span class="badge bg-info">${value}</span>`;
-                    }
-                    return `<span class="badge bg-light text-dark">Unknown</span>`;
-                }
+                render: (value) => value || '<span class="text-muted">Unknown</span>'
             },
             {
                 key: 'role',
                 title: 'Role',
                 sortable: true,
-                render: (value, row) => {
-                    if (value && value !== 'Unknown') {
-                        let badgeClass = 'bg-secondary';
-                        if (value === 'CLIENT') badgeClass = 'bg-primary';
-                        else if (value === 'ROUTER') badgeClass = 'bg-success';
-                        else if (value === 'ROUTER_LATE') badgeClass = 'bg-success';
-                        else if (value === 'REPEATER') badgeClass = 'bg-warning';
-                        else if (value === 'CLIENT_MUTE') badgeClass = 'bg-secondary';
-                        else if (value === 'ROUTER_CLIENT') badgeClass = 'bg-info';
-                        else if (value === 'SENSOR') badgeClass = 'bg-dark';
-
-                        return `<span class="badge ${badgeClass}">${value}</span>`;
+                type: 'badge',
+                badgeMap: {
+                    'CLIENT': 'modern-badge-primary',
+                    'CLIENT_MUTE': 'modern-badge-secondary',
+                    'ROUTER': 'modern-badge-success',
+                    'ROUTER_CLIENT': 'modern-badge-info',
+                    'REPEATER': 'modern-badge-warning',
+                    'TRACKER': 'modern-badge-dark'
+                }
+            },
+            {
+                key: 'battery_level',
+                title: 'Battery',
+                sortable: true,
+                render: (value) => {
+                    if (value === null || value === undefined) {
+                        return '<span class="text-muted">N/A</span>';
                     }
-                    return `<span class="badge bg-light text-dark">Unknown</span>`;
+                    let color = 'text-success';
+                    if (value < 20) color = 'text-danger';
+                    else if (value < 50) color = 'text-warning';
+                    return `<span class="${color}">${value}%</span>`;
                 }
             },
             {
@@ -307,150 +298,95 @@ document.addEventListener('DOMContentLoaded', function() {
                 sortable: true,
                 sortKey: 'last_packet_time',
                 render: (value, row) => {
-                    if (value && value !== 'Never') {
-                        return `<small>${value}</small>`;
+                    if (!row.last_packet_time) {
+                        return '<span class="text-muted">Never</span>';
                     }
-                    return `<span class="text-muted">Never</span>`;
+                    // Use the pre-formatted string from the backend
+                    const ageClass = row.age_hours < 1 ? 'text-success' :
+                                   row.age_hours < 24 ? 'text-warning' : 'text-muted';
+                    return `<span class="${ageClass}" title="${row.last_packet_time}">${value}</span>`;
                 }
             },
             {
                 key: 'packet_count_24h',
-                title: '24h Activity',
-                sortable: true,
-                render: (value, row) => {
-                    const count = parseInt(value) || 0;
-                    if (count > 0) {
-                        let badgeClass = 'bg-success';
-                        if (count < 10) badgeClass = 'bg-warning';
-                        else if (count < 50) badgeClass = 'bg-info';
-
-                        return `<span class="badge ${badgeClass}">${count}</span>`;
-                    }
-                    return `<span class="badge bg-light text-dark">0</span>`;
-                }
-            },
-            {
-                key: 'primary_channel',
-                title: 'Channel',
+                title: '24h Packets',
                 sortable: true,
                 render: (value) => {
-                    return value ? `<span class="badge bg-secondary">${value}</span>` : '<span class="text-muted">Unknown</span>';
+                    if (!value) return '<span class="text-muted">0</span>';
+                    return `<span class="badge bg-primary">${value}</span>`;
                 }
             },
             {
-                key: 'node_id',
+                key: 'actions',
                 title: 'Actions',
-                sortable: false,
-                render: (value, row) => {
-                    // Create filtered URLs using the URL manager
-                    const packetsUrl = urlManager.createFilteredURL('/packets', {
-                        from_node: value
-                    });
-                    const tracerouteUrl = urlManager.createFilteredURL('/traceroute', {
-                        from_node: value
-                    });
-
-                    return `
-                        <div class="btn-group" role="group">
-                            <a href="/node/${value}"
-                               class="btn btn-sm btn-outline-primary" title="View node details">
-                                <i class="bi bi-info-circle"></i>
-                            </a>
-                            <a href="${packetsUrl}"
-                               class="btn btn-sm btn-outline-secondary" title="View packets from this node">
-                                <i class="bi bi-envelope"></i>
-                            </a>
-                            <a href="${tracerouteUrl}"
-                               class="btn btn-sm btn-outline-info" title="View traceroutes from this node">
-                                <i class="bi bi-diagram-3"></i>
-                            </a>
-                        </div>`;
-                }
+                type: 'actions',
+                actions: [
+                    {
+                        icon: 'eye',
+                        title: 'View details',
+                        url: '/node/{id}',
+                        class: 'text-primary'
+                    }
+                ]
             }
-        ]
+        ];
+    }
+
+    // Initialize the modern table with proper server-side pagination
+    const table = new ModernTable('nodesTable', {
+        endpoint: '/api/nodes/data',
+        enableSearch: false,  // We handle search through filters
+        enablePagination: true,
+        pageSize: 25,
+        deferInitialLoad: true,
+        columns: getDynamicColumns()
     });
 
-    // We no longer paginate or infinite-scroll; the whole dataset will be rendered at once.
+    // Override the renderPagination method to include items per page dropdown
+    const originalRenderPagination = table.renderPagination.bind(table);
+    table.renderPagination = function() {
+        return `
+            <div class="modern-pagination">
+                <div class="pagination-info">
+                    Showing <span id="${this.container.id}-start">0</span> to <span id="${this.container.id}-end">0</span>
+                    of <span id="${this.container.id}-total">0</span> entries
+                </div>
+                <div class="pagination-controls" id="${this.container.id}-pagination">
+                    <!-- Pagination buttons will be rendered here -->
+                </div>
+                <div class="items-per-page-control">
+                    <label for="${this.container.id}-items-per-page">Items per page:</label>
+                    <select id="${this.container.id}-items-per-page" class="form-select form-select-sm">
+                        <option value="5">5</option>
+                        <option value="10">10</option>
+                        <option value="25" selected>25</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </select>
+                </div>
+            </div>
+        `;
+    };
 
-    // ------------------------------------------------------------------
-    // Override ModernTable logic – perform all processing client-side
-    // ------------------------------------------------------------------
-    table.loadData = async function() {
-        // If dataset not yet available (should not happen after initial Promise), fetch it now
-        if (allNodeData.length === 0) {
-            await fetchAllNodes();
-        }
+    // Add items per page change handler after table initialization
+    const originalSetupEventListeners = table.setupEventListeners.bind(table);
+    table.setupEventListeners = function() {
+        originalSetupEventListeners();
 
-        this.state.loading = true;
-        // Only show loading spinner when first page loads
-        if (this.state.page === 1) this.showLoading();
-
-        try {
-            // Start with full dataset
-            let filtered = [...allNodeData];
-            const filters = this.state.filters || {};
-
-            // --- Search filter -------------------------------------------------
-            const searchQuery = (filters.search || '').toString().trim().toLowerCase();
-            if (searchQuery) {
-                filtered = filtered.filter((n) => {
-                    const haystack = [
-                        n.node_name,
-                        n.long_name,
-                        n.short_name,
-                        n.hex_id,
-                        n.hw_model,
-                        n.role
-                    ].map(v => (v || '').toString().toLowerCase()).join(' ');
-                    return haystack.includes(searchQuery);
-                });
-            }
-
-            // --- Role filter ---------------------------------------------------
-            if (filters.role) filtered = filtered.filter((n) => n.role === filters.role);
-            // --- Hardware model filter ----------------------------------------
-            if (filters.hw_model) filtered = filtered.filter((n) => n.hw_model === filters.hw_model);
-            // --- Primary channel filter --------------------------------------
-            if (filters.primary_channel) filtered = filtered.filter((n) => n.primary_channel === filters.primary_channel);
-            // --- Active only ---------------------------------------------------
-            if (filters.active_only === true || filters.active_only === '1') {
-                filtered = filtered.filter((n) => (n.packet_count_24h || 0) > 0);
-            }
-            // --- Named only ----------------------------------------------------
-            if (filters.named_only === true || filters.named_only === '1') {
-                filtered = filtered.filter((n) => (n.long_name || n.short_name));
-            }
-
-            // --- Sorting -------------------------------------------------------
-            if (!this.state.sortBy) {
-                this.state.sortBy = 'last_packet_time';
-                this.state.sortOrder = 'desc';
-            }
-            const dir = this.state.sortOrder === 'asc' ? 1 : -1;
-            const key = this.state.sortBy;
-            filtered.sort((a, b) => {
-                const av = a[key] ?? '';
-                const bv = b[key] ?? '';
-                return av < bv ? -1 * dir : (av > bv ? 1 * dir : 0);
+        // Add items per page selector
+        const itemsPerPageSelect = document.getElementById(`${this.container.id}-items-per-page`);
+        if (itemsPerPageSelect) {
+            itemsPerPageSelect.addEventListener('change', (e) => {
+                this.state.pageSize = parseInt(e.target.value);
+                this.state.page = 1;
+                this.loadData();
             });
-
-            // --- Render entire dataset (no pagination) -------------------------
-            this.state.totalCount = filtered.length;
-            this.state.data = filtered;
-            this.renderTableBody();
-
-            this.emit('dataLoaded', { data: this.state.data, totalCount: this.state.totalCount });
-        } catch (error) {
-            console.error('Error processing node data locally:', error);
-            this.showError(error.message || 'Failed to process data');
-        } finally {
-            this.state.loading = false;
         }
     };
 
-    // Update stats function (removed - stats section was removed from UI)
+    // Update stats function
     function updateStats() {
-        // No-op - stats section removed
+        // Stats functionality can be added here if needed
     }
 
     // Initialize the filter controller
@@ -473,7 +409,21 @@ document.addEventListener('DOMContentLoaded', function() {
     applyFiltersBtn.addEventListener('click', () => controller.applyCurrentFilters());
     clearFiltersBtn.addEventListener('click', () => controller.clearFilters());
     refreshBtn.addEventListener('click', () => {
-        table.refresh();
+        table.loadData();
+    });
+
+    // Initialize page with filters and load data
+    async function initializePageWithFilters() {
+        // Apply URL parameters
+        const hasParams = await urlManager.applyURLParameters();
+
+        // Initialize the filter controller
+        controller.initialLoad(hasParams);
+    }
+
+    // Load supporting data then initialize
+    Promise.all([loadHardwareModels(), loadNodeRoles(), loadPrimaryChannels()]).then(async () => {
+        initializePageWithFilters();
     });
 
     // Initialize tooltips after table loads

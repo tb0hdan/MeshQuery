@@ -88,14 +88,20 @@
                     markerColor = '#00ff00'; // Green for low activity
                 }
 
+                // Create marker with zoom-responsive sizing
+                const baseRadius = Math.max(3, Math.min(12, 3 + relativeIntensity * 8));
                 const marker = L.circleMarker([loc.latitude, loc.longitude], {
-                    radius: Math.max(3, Math.min(8, 3 + relativeIntensity * 5)), // Size based on activity
+                    radius: baseRadius,
                     fillColor: markerColor,
                     color: '#ffffff',
                     weight: 1,
                     opacity: 1,
                     fillOpacity: 0.8,
                 }).bindTooltip(`${loc.display_name || loc.short_name || loc.hex_id || String(loc.node_id)} (${count} packets)`, { direction: 'top' });
+
+                // Store original radius for zoom scaling
+                marker._originalRadius = baseRadius;
+                marker._relativeIntensity = relativeIntensity;
                 nodeMarkersGroup.addLayer(marker);
             });
             // Fit map to markers if any
@@ -107,24 +113,54 @@
         } catch (err) {
             console.error('Failed to load locations for heatmap', err);
         }
-        // Initialise heat layer with enhanced gradient - use max radius by default
-        const radius = 50; // Max radius for better coverage
+        // Function to calculate radius based on zoom level
+        function getRadiusForZoom(zoom) {
+            // Base radius scales with zoom level: larger radius for lower zoom, smaller for higher zoom
+            const baseRadius = Math.max(15, Math.min(80, 15 + (18 - zoom) * 8));
+            return baseRadius;
+        }
+
+        // Initialise heat layer with enhanced gradient and dynamic radius
+        const initialRadius = getRadiusForZoom(map.getZoom());
         heatLayer = L.heatLayer(points, {
-            radius: radius,
-            blur: 20,
-            maxZoom: 17,
+            radius: initialRadius,
+            blur: Math.max(5, initialRadius * 0.4), // Blur proportional to radius
+            maxZoom: 18,
             gradient: {
-                0.0: '#000000', // Black for no activity
-                0.1: '#000080', // Dark blue for very low activity
-                0.2: '#0000FF', // Blue for low activity
-                0.4: '#0080FF', // Light blue for medium-low activity
-                0.6: '#00FFFF', // Cyan for medium activity
-                0.7: '#00FF80', // Light green for medium-high activity
-                0.8: '#00FF00', // Green for high activity
-                0.9: '#FFFF00', // Yellow for very high activity
-                1.0: '#FF0000'  // Red for maximum activity
+                0.0: 'rgba(0,0,0,0)',     // Transparent for no activity
+                0.1: 'rgba(0,0,128,0.3)', // Dark blue for very low activity
+                0.2: 'rgba(0,0,255,0.5)', // Blue for low activity
+                0.4: 'rgba(0,128,255,0.6)', // Light blue for medium-low activity
+                0.6: 'rgba(0,255,255,0.7)', // Cyan for medium activity
+                0.7: 'rgba(0,255,128,0.8)', // Light green for medium-high activity
+                0.8: 'rgba(0,255,0,0.9)', // Green for high activity
+                0.9: 'rgba(255,255,0,0.95)', // Yellow for very high activity
+                1.0: 'rgba(255,0,0,1)'  // Red for maximum activity
             }
         }).addTo(map);
+
+        // Function to update marker sizes based on zoom
+        function updateMarkerSizes() {
+            const currentZoom = map.getZoom();
+            const scaleFactor = Math.max(0.5, Math.min(2.0, 0.5 + (currentZoom - 3) * 0.15));
+
+            nodeMarkersGroup.eachLayer(function(marker) {
+                if (marker._originalRadius !== undefined) {
+                    const newRadius = marker._originalRadius * scaleFactor;
+                    marker.setRadius(newRadius);
+                }
+            });
+        }
+
+        // Update heatmap radius and marker sizes when zoom changes
+        map.on('zoomend', function() {
+            const newRadius = getRadiusForZoom(map.getZoom());
+            heatLayer.setOptions({
+                radius: newRadius,
+                blur: Math.max(5, newRadius * 0.4)
+            });
+            updateMarkerSizes();
+        });
         // Show markers by default
         nodeMarkersGroup.addTo(map);
         // Event listeners for controls (slider removed, using fixed max radius)
