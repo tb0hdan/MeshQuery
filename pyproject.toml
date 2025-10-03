@@ -52,6 +52,9 @@ dependencies = [
     "types-Markdown==3.9.0.20250906",
     "pytest==8.4.2",
     "pytest-cov==7.0.0",
+    "coverage>=7.6.0",
+    "line-profiler>=4.2.0",
+    "py-spy>=0.4.0",
 ]
 
 [project.urls]
@@ -111,7 +114,6 @@ addopts = [
     "-v",
     "--tb=short",
     "--strict-markers",
-    "-n=auto",
     "--color=yes",
     "--durations=10",
     "--durations-min=1.0",
